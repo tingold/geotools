@@ -1,6 +1,7 @@
 package org.geotools.process.raster.gs;
 
 import java.awt.image.RenderedImage;
+import java.awt.image.renderable.ParameterBlock;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -8,7 +9,10 @@ import java.util.List;
 import java.util.Set;
 
 import javax.media.jai.JAI;
+import javax.media.jai.OperationDescriptor;
+import javax.media.jai.OperationRegistry;
 import javax.media.jai.ParameterBlockJAI;
+import javax.media.jai.ROI;
 import javax.media.jai.RenderedOp;
 import javax.media.jai.operator.BandSelectDescriptor;
 
@@ -19,6 +23,8 @@ import org.geotools.process.factory.DescribeProcess;
 import org.geotools.process.factory.DescribeResult;
 import org.geotools.process.gs.GSProcess;
 import org.geotools.process.raster.classbreaks.ClassBreaksDescriptor;
+import org.geotools.process.raster.classbreaks.ClassBreaksOpImage;
+import org.geotools.process.raster.classbreaks.ClassBreaksRIF;
 import org.geotools.process.raster.classbreaks.Classification;
 import org.geotools.process.raster.classbreaks.Classification.Method;
 import org.geotools.renderer.i18n.Errors;
@@ -90,15 +96,30 @@ public class CoverageClassStats implements GSProcess {
         }
 
         //compute the class breaks
-        ParameterBlockJAI pb = new ParameterBlockJAI(ClassBreaksDescriptor.NAME);
+        //JD: for some reason running this in tomcat via JAI.create does not work, the operation
+        // descriptor is never registered and it fails, so for now we just invoke the op directly 
+        // TODO: look into this more
+        ParameterBlock pb = new ParameterBlock();
         pb.addSource(sourceImage);
+        pb.set(classes, 0);
+        pb.set(method, 1);
+        pb.set(null, 2);
+        pb.set(null, 3);
+        pb.set(new Integer[]{0}, 4);
+        pb.set(1, 5);
+        pb.set(1, 6);
+        pb.set(noData, 7);
+
+        RenderedImage op = new ClassBreaksRIF().create(pb, null);
+        
+        /*ParameterBlockJAI pb = new ParameterBlockJAI(ClassBreaksDescriptor.NAME);
         pb.setParameter("numClasses", classes);
         pb.setParameter("method", method);
         if (noData != null) {
             pb.setParameter("noData", noData);
         }
 
-        RenderedOp op = JAI.create(ClassBreaksDescriptor.NAME, pb);
+        RenderedOp op = JAI.create(ClassBreaksDescriptor.NAME, pb);*/
         Classification c = 
             (Classification) op.getProperty(ClassBreaksDescriptor.CLASSIFICATION_PROPERTY);
 
@@ -111,13 +132,13 @@ public class CoverageClassStats implements GSProcess {
         }
 
         //calculate stats for each class
-        pb = new ParameterBlockJAI("ZonalStats");
-        pb.addSource(sourceImage);
-        pb.setParameter("stats", stats.toArray(new Statistic[stats.size()]));
-        pb.setParameter("bands", new Integer[]{band});
-        pb.setParameter("ranges", ranges);
-        pb.setParameter("rangesType", Range.Type.INCLUDE);
-        pb.setParameter("rangeLocalStats", true);
+        ParameterBlockJAI pbj = new ParameterBlockJAI("ZonalStats");
+        pbj.addSource(sourceImage);
+        pbj.setParameter("stats", stats.toArray(new Statistic[stats.size()]));
+        pbj.setParameter("bands", new Integer[]{band});
+        pbj.setParameter("ranges", ranges);
+        pbj.setParameter("rangesType", Range.Type.INCLUDE);
+        pbj.setParameter("rangeLocalStats", true);
 //        "bands", 
 //        "roi", 
 //        "zoneTransform", 
@@ -125,7 +146,7 @@ public class CoverageClassStats implements GSProcess {
 //        "rangesType", 
 //        "rangeLocalStats", 
 //        "noDataRanges"
-        op = JAI.create("ZonalStats", pb);
+        op = JAI.create("ZonalStats", pbj);
 
         ZonalStats zonalStats = (ZonalStats) op.getProperty(ZonalStatsDescriptor.ZONAL_STATS_PROPERTY);
         return new Results(stats, zonalStats);

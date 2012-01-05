@@ -9,7 +9,7 @@ import javax.media.jai.registry.RenderedRegistryMode;
 public class ClassBreaksSpi implements OperationRegistrySpi {
 
     /** The name of the product to which these operations belong. */
-    private String productName = "org.jaitools.media.jai.classifiedstats";
+    private String productName = "org.jaitools.media.jai";
 
     /** Default constructor. */
     public ClassBreaksSpi() {}

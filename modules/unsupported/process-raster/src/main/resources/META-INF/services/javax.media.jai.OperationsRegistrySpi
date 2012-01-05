@@ -1,1 +1,1 @@
-javax.media.jai.OperationsRegistrySpi.classbreaks.ClassBreaksSpi
+org.geotools.process.raster.classbreaks.ClassBreaksSpi
