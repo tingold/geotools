@@ -133,6 +133,7 @@ public class CoverageClassStats implements GSProcess {
 
     public static class Results {
 
+        Statistic firstStat;
         Set<Statistic> stats;
         ZonalStats zonalStats;
         List<Result> ranges;
@@ -140,7 +141,8 @@ public class CoverageClassStats implements GSProcess {
         public Results(Set<Statistic> stats, ZonalStats zonalStats) {
             this.stats = stats;
             this.zonalStats = zonalStats;
-            ranges = zonalStats.statistic(stats.iterator().next()).results();
+            this.firstStat = stats.iterator().next();
+            ranges = zonalStats.statistic(firstStat).results();
         }
 
         public int size() {
@@ -157,6 +159,10 @@ public class CoverageClassStats implements GSProcess {
 
         public Double value(int i, Statistic stat) {
             return zonalStats.statistic(stat).results().get(i).getValue();
+        }
+
+        public Long count(int i) {
+            return zonalStats.statistic(firstStat).results().get(i).getNumAccepted();
         }
 
         ZonalStats getZonalStats() {

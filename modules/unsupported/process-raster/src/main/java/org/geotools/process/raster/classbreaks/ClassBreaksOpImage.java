@@ -150,7 +150,6 @@ public abstract class ClassBreaksOpImage extends StatisticsOpImage {
         int lineStride = uid.lineStride * yPeriod;
         int[] offsets = uid.bandOffsets;
 
-        // accumulate the min/max
         for (int i = 0; i < bands.length; i++) {
             int b = bands[i];
 

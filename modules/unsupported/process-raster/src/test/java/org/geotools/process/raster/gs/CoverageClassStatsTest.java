@@ -118,6 +118,27 @@ public class CoverageClassStatsTest {
             p.execute(createSfDemCoverage(), null, 4, Method.EQUAL_INTERVAL, null, -9.999999933815813E36, null);
         r.print();
     }*/
+    
+    /*
+    @Test
+    public void testMedfordDem() throws Exception {
+        CoverageClassStats p = new CoverageClassStats();
+        Results r = 
+            p.execute(createMedfordDemCoverage(), null, 10, Method.EQUAL_INTERVAL, null, null, null);
+        r.print();
+    }*/
+
+    GridCoverage2D createMedfordDemCoverage() throws IOException {
+        
+        BufferedImage img = ImageIO.read(new File("/Users/jdeolive/Projects/suite_trunk/git/data_dir/data/dem/medford_dem.tif"));
+
+        Rectangle bounds = new Rectangle(img.getMinX(), img.getMinY(), img.getWidth(), img.getHeight());
+        ReferencedEnvelope env = new ReferencedEnvelope(bounds, null);
+
+        GridCoverageFactory factory = CoverageFactoryFinder.getGridCoverageFactory(null);
+        return factory.create("coverage", img, env);
+    }
+
 
     GridCoverage2D createSfDemCoverage() throws IOException {
         
