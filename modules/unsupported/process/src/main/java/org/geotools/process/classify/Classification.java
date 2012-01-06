@@ -1,4 +1,4 @@
-package org.geotools.process.raster.classbreaks;
+package org.geotools.process.classify;
 
 public class Classification {
 
@@ -34,7 +34,7 @@ public class Classification {
         return breaks;
     }
 
-    void setBreaks(int b, Double[] breaks) {
+    public void setBreaks(int b, Double[] breaks) {
         this. breaks[b] = breaks;
     }
 
@@ -42,7 +42,7 @@ public class Classification {
         return min[b];
     }
 
-    void setMin(int b, Double min) {
+    public void setMin(int b, Double min) {
         this.min[b] = min;
     }
 
@@ -50,11 +50,11 @@ public class Classification {
         return max[b];
     }
 
-    void setMax(int b, Double max) {
+    public void setMax(int b, Double max) {
         this.max[b] = max;
     }
 
-    void print() {
+    public void print() {
         for (int i = 0; i < breaks.length; i++) {
             for (Double d : breaks[i]) {
                 System.out.println(d);

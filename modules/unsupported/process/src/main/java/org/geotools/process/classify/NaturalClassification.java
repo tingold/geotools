@@ -1,4 +1,4 @@
-package org.geotools.process.raster.classbreaks;
+package org.geotools.process.classify;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,11 +17,11 @@ public class NaturalClassification extends Classification {
         }
     }
 
-    void count(double value, int band) {
+    public void count(double value, int band) {
         values[band].add(value);
     }
 
-    List<Double> getValues(int band) {
+    public List<Double> getValues(int band) {
         return values[band];
     }
 }

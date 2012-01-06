@@ -1,4 +1,4 @@
-package org.geotools.process.raster.classbreaks;
+package org.geotools.process.classify;
 
 import java.util.Map.Entry;
 import java.util.SortedMap;
@@ -15,7 +15,7 @@ public class QuantileClassification extends Classification {
         tables = new SortedMap[numBands];
     }
 
-    void count(double value, int band) {
+    public void count(double value, int band) {
         counts[band]++;
 
         SortedMap<Double, Integer> table = getTable(band);
@@ -24,7 +24,7 @@ public class QuantileClassification extends Classification {
         table.put(value, count != null ? new Integer(count + 1) : new Integer(1));
     }
 
-    SortedMap<Double, Integer> getTable(int band) {
+    public SortedMap<Double, Integer> getTable(int band) {
         SortedMap<Double, Integer> table = tables[band];
         if (table == null) {
             table = new TreeMap<Double, Integer>();
@@ -33,7 +33,7 @@ public class QuantileClassification extends Classification {
         return table;
     }
 
-    int getCount(int band) {
+    public int getCount(int band) {
         return counts[band];
     }
 
