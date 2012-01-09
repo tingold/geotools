@@ -26,7 +26,7 @@ import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.coverage.grid.GridCoverageFactory;
 import org.geotools.coverage.grid.GridGeometry2D;
 import org.geotools.geometry.jts.ReferencedEnvelope;
-import org.geotools.process.raster.classbreaks.Classification.Method;
+import org.geotools.process.classify.Classification.Method;
 import org.geotools.process.raster.gs.CoverageClassStats.Results;
 import org.geotools.referencing.crs.DefaultEngineeringCRS;
 import org.geotools.referencing.cs.DefaultCartesianCS;

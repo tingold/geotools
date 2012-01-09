@@ -9,6 +9,9 @@ import java.util.TreeSet;
 
 import javax.media.jai.ROI;
 
+import org.geotools.process.classify.Classification;
+import org.geotools.process.classify.QuantileClassification;
+
 public class QuantileBreaksOpImage extends ClassBreaksOpImage {
 
     public QuantileBreaksOpImage(RenderedImage image, Integer numClasses, Double[][] extrema,

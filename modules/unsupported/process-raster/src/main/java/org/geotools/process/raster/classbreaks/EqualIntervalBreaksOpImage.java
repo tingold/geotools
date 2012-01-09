@@ -9,7 +9,8 @@ import javax.media.jai.PixelAccessor;
 import javax.media.jai.ROI;
 import javax.media.jai.UnpackedImageData;
 
-import org.geotools.process.raster.classbreaks.Classification.Method;
+import org.geotools.process.classify.Classification;
+import org.geotools.process.classify.Classification.Method;
 
 public class EqualIntervalBreaksOpImage extends ClassBreaksOpImage {
 

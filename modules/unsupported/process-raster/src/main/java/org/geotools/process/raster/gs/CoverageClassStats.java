@@ -18,6 +18,9 @@ import javax.media.jai.operator.BandSelectDescriptor;
 
 import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.process.ProcessException;
+import org.geotools.process.classify.Classification;
+import org.geotools.process.classify.ClassificationStats;
+import org.geotools.process.classify.Classification.Method;
 import org.geotools.process.factory.DescribeParameter;
 import org.geotools.process.factory.DescribeProcess;
 import org.geotools.process.factory.DescribeResult;
@@ -25,8 +28,6 @@ import org.geotools.process.gs.GSProcess;
 import org.geotools.process.raster.classbreaks.ClassBreaksDescriptor;
 import org.geotools.process.raster.classbreaks.ClassBreaksOpImage;
 import org.geotools.process.raster.classbreaks.ClassBreaksRIF;
-import org.geotools.process.raster.classbreaks.Classification;
-import org.geotools.process.raster.classbreaks.Classification.Method;
 import org.geotools.renderer.i18n.Errors;
 import org.geotools.resources.i18n.ErrorKeys;
 import org.jaitools.media.jai.zonalstats.Result;
@@ -152,7 +153,7 @@ public class CoverageClassStats implements GSProcess {
         return new Results(stats, zonalStats);
     }
 
-    public static class Results {
+    public static class Results implements ClassificationStats  {
 
         Statistic firstStat;
         Set<Statistic> stats;

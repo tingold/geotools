@@ -7,7 +7,7 @@ import java.awt.image.renderable.RenderedImageFactory;
 
 import javax.media.jai.ROI;
 
-import org.geotools.process.raster.classbreaks.Classification.Method;
+import org.geotools.process.classify.Classification.Method;
 
 import static org.geotools.process.raster.classbreaks.ClassBreaksDescriptor.*;
 

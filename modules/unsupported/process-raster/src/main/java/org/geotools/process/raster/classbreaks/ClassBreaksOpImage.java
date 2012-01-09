@@ -13,6 +13,8 @@ import javax.media.jai.ROI;
 import javax.media.jai.StatisticsOpImage;
 import javax.media.jai.UnpackedImageData;
 
+import org.geotools.process.classify.Classification;
+
 public abstract class ClassBreaksOpImage extends StatisticsOpImage {
 
     /* number of classes */

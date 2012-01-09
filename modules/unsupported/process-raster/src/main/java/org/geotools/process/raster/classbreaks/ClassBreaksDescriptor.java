@@ -6,7 +6,7 @@ import javax.media.jai.OperationDescriptorImpl;
 import javax.media.jai.ROI;
 import javax.media.jai.registry.RenderedRegistryMode;
 
-import org.geotools.process.raster.classbreaks.Classification.Method;
+import org.geotools.process.classify.Classification.Method;
 
 public class ClassBreaksDescriptor extends OperationDescriptorImpl {
 

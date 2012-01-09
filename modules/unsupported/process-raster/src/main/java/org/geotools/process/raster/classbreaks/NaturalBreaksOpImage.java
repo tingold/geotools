@@ -8,6 +8,9 @@ import java.util.SortedSet;
 
 import javax.media.jai.ROI;
 
+import org.geotools.process.classify.Classification;
+import org.geotools.process.classify.NaturalClassification;
+
 public class NaturalBreaksOpImage extends ClassBreaksOpImage {
 
     public NaturalBreaksOpImage(RenderedImage image, Integer numClasses, Double[][] extrema,
