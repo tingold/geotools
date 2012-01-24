@@ -205,6 +205,10 @@ public class SimpleFeatureBuilder {
                 add(value);
             }
         }
+
+        if (!feature.getUserData().isEmpty()) {
+            featureUserData = new HashMap(feature.getUserData());
+        }
     }
     
     
