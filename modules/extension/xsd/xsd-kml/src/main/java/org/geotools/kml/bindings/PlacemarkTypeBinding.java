@@ -56,19 +56,22 @@ import org.geotools.xml.Node;
  * @source $URL$
  */
 public class PlacemarkTypeBinding extends AbstractComplexBinding {
-    static final SimpleFeatureType featureType;
+    /**
+     * default feature type if no schema specified
+     */
+    static final SimpleFeatureType DefaultFeatureType;
 
     static {
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
 
         //TODO: use inheiretance when our feature model works
-        tb.init(FeatureTypeBinding.featureType);
+        tb.init(FeatureTypeBinding.FeatureType);
         tb.setName("placemark");
 
         //&lt;element minOccurs="0" ref="kml:Geometry"/&gt;
         tb.add("Geometry", Geometry.class);
 
-        featureType = tb.buildFeatureType();
+        DefaultFeatureType = tb.buildFeatureType();
     }
 
     /**
@@ -100,7 +103,7 @@ public class PlacemarkTypeBinding extends AbstractComplexBinding {
      */
     public Object parse(ElementInstance instance, Node node, Object value)
         throws Exception {
-        SimpleFeatureBuilder b = new SimpleFeatureBuilder(featureType);
+        SimpleFeatureBuilder b = new SimpleFeatureBuilder(DefaultFeatureType);
 
         SimpleFeature feature = (SimpleFeature) value;
         b.init(feature);
