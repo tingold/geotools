@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.geotools.xml.Parser;
+import org.geotools.xml.PullParser;
 import org.geotools.xml.StreamingParser;
 import org.opengis.feature.simple.SimpleFeature;
 
@@ -45,7 +46,7 @@ public class KMLParsingTest extends KMLTestSupport {
         
     }
 
-    public void testStreamParseExtendedData() throws Exception {
+    public void testStreamParse() throws Exception {
         StreamingParser p = new StreamingParser(createConfiguration(), 
             getClass().getResourceAsStream("KML_Samples.kml"), KML.Placemark);
         int count = 0;
@@ -55,6 +56,18 @@ public class KMLParsingTest extends KMLTestSupport {
         assertEquals(20, count);
     }
 
+    public void testPullParse() throws Exception {
+        PullParser p = new PullParser(createConfiguration(),
+            getClass().getResourceAsStream("KML_Samples.kml"), KML.Placemark);
+     
+        int count = 0;
+        while(p.parse() != null) {
+            count++;
+        }
+        assertEquals(20, count);
+    }
+
+    
     public void testParsemarkExtendedData() throws Exception {
         String xml = 
             " <Placemark> " + 
