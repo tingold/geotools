@@ -98,6 +98,7 @@
     <build.timestamp>${maven.build.timestamp}</build.timestamp>
     <fork.javac>true</fork.javac>
     <javac.maxHeapSize>256M</javac.maxHeapSize>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <!-- Profiles set on the command-line overwrite default properties. -->
@@ -108,7 +109,7 @@
          <property><name>all</name></property>
        </activation>
       <modules>
-        <!--module>docs</module-->      
+        <module>docs</module>
       </modules>
     </profile>
     <profile>

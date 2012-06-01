@@ -20,9 +20,7 @@ package org.geotools.data.complex;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -32,7 +30,6 @@ import java.util.Set;
 
 import javax.xml.namespace.QName;
 
-import org.apache.commons.lang.math.NumberUtils;
 import org.apache.commons.lang.StringUtils;
 import org.geotools.data.DataAccess;
 import org.geotools.data.DataSourceException;
@@ -43,12 +40,14 @@ import org.geotools.data.complex.filter.XPath.Step;
 import org.geotools.data.complex.filter.XPath.StepList;
 import org.geotools.data.joining.JoiningNestedAttributeMapping;
 import org.geotools.data.joining.JoiningQuery;
+import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.feature.AttributeBuilder;
 import org.geotools.feature.ComplexAttributeImpl;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureImpl;
 import org.geotools.feature.FeatureIterator;
 import org.geotools.feature.Types;
+import org.geotools.feature.type.ComplexFeatureTypeFactoryImpl;
 import org.geotools.filter.AttributeExpressionImpl;
 import org.geotools.filter.FilterAttributeExtractor;
 import org.geotools.gml2.bindings.GML2EncodingUtils;
@@ -63,7 +62,12 @@ import org.opengis.feature.Property;
 import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.AttributeType;
 import org.opengis.feature.type.FeatureType;
+import org.opengis.feature.type.FeatureTypeFactory;
+import org.opengis.feature.type.GeometryDescriptor;
+import org.opengis.feature.type.GeometryType;
 import org.opengis.feature.type.Name;
+import org.opengis.filter.Filter;
+import org.opengis.feature.type.PropertyDescriptor;
 import org.opengis.filter.expression.Expression;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.identity.FeatureId;
@@ -92,35 +96,6 @@ import org.xml.sax.Attributes;
  * @since 2.4
  */
 public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIterator {
-
-    class ValueComparator implements Comparator {
-        @Override
-        public int compare(Object o1, Object o2) {
-            if (o1 == null) {
-                if (o2 == null) {
-                    return 0;
-                } else {
-                    return -1;
-                }
-            }
-            if (o2 == null) {
-                return 1;
-            }
-
-            String string1 = o1.toString();
-            String string2 = o2.toString();
-
-            // in case numbers are stored as string, make sure the order is correct
-            if (NumberUtils.isNumber(string1) && NumberUtils.isNumber(string2)) {
-                return Double.valueOf(string1).compareTo(Double.valueOf(string2));
-            }
-
-            if (o1 instanceof Comparable) {
-                return ((Comparable) o1).compareTo(o2);
-            }
-            return string1.compareTo(string2);
-        }
-    }
     /**
      * Hold on to iterator to allow features to be streamed.
      */
@@ -141,6 +116,8 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
     protected FeatureCollection<? extends FeatureType, ? extends Feature> sourceFeatures;
 
     protected List<Expression> foreignIds = null;
+    
+	protected AttributeDescriptor targetFeature;
 
     /**
      * True if joining is turned off and pre filter exists. There's a need to run extra query to get
@@ -150,8 +127,10 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
     private boolean isFiltered = false;
     
     private ArrayList<String> filteredFeatures;
-
-    private ValueComparator comparator;
+    /**
+     * Temporary/experimental changes for enabling subsetting for isList only. 
+     */
+    private Filter listFilter;
 
     public DataAccessMappingFeatureIterator(AppSchemaDataAccess store, FeatureTypeMapping mapping,
             Query query, boolean isFiltered) throws IOException {
@@ -208,6 +187,24 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
                         }
                     }
                 }
+                // HACK HACK HACK
+                // evaluate filter that applies to this list as we want a subset
+                // instead of full result
+                // this is a temporary solution for Bureau of Meteorology
+                // requirement for timePositionList
+                if (listFilter != null) {
+                    while (exists && !listFilter.evaluate(curSrcFeature)) {
+                        // only add to subset if filter matches value
+                        if (getSourceFeatureIterator() != null
+                                && getSourceFeatureIterator().hasNext()) {
+                            this.curSrcFeature = getSourceFeatureIterator().next();
+                            exists = true;
+                        } else {
+                            exists = false;
+                        }
+                    }
+                }
+                // END OF HACK
             } else {
                 exists = false;
             }
@@ -336,22 +333,37 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
             // gather declared CRS
             CoordinateReferenceSystem declaredCRS = this.getDeclaredCrs(crs, version);
             CoordinateReferenceSystem target;
-            URI uri=(URI)this.mapping.getTargetFeature().getType().getUserData().get("targetCrs");
-            if (uri != null) {
-                try {
-                    target = CRS.decode(uri.toString());
-                } catch (Exception e) {
-                    String msg = "Unable to support srsName: " + uri;
-                    throw new UnsupportedOperationException(msg, e);
-                }
+            Object crsobject = this.mapping.getTargetFeature().getType().getUserData().get("targetCrs");
+            if (crsobject instanceof CoordinateReferenceSystem) {
+            	target = (CoordinateReferenceSystem) crsobject;
+            } else if (crsobject instanceof URI) {
+            
+	            URI uri=(URI) crsobject;
+	            if (uri != null) {
+	                try {
+	                    target = CRS.decode(uri.toString());
+	                } catch (Exception e) {
+	                    String msg = "Unable to support srsName: " + uri;
+	                    throw new UnsupportedOperationException(msg, e);
+	                }
+	            } else {
+	                target = declaredCRS;
+	            }
             } else {
-                target = declaredCRS;
+            	target = declaredCRS;
             }
             this.reprojection = target;
-
+            
         } else {
             this.reprojection = targetCRS;
         }
+        
+        //clean up user data related to request
+        mapping.getTargetFeature().getType().getUserData().put("targetVersion", null);
+        mapping.getTargetFeature().getType().getUserData().put("targetCrs", null);
+        
+        //reproject target feature
+        targetFeature = reprojectAttribute(mapping.getTargetFeature());
 
         // we need to disable the max number of features retrieved so we can
         // sort them manually just in case the data is denormalised
@@ -741,8 +753,26 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
         while (getSourceFeatureIterator().hasNext()) {
             Feature next = getSourceFeatureIterator().next();
             if (extractIdForFeature(next).equals(fId) && checkForeignIdValues(foreignIdValues, next)) {
-                features.add(next);
-            } else {
+                // HACK HACK HACK
+                // evaluate filter that applies to this list as we want a subset
+                // instead of full result
+                // this is a temporary solution for Bureau of Meteorology
+                // requirement for timePositionList
+                if (listFilter != null) {
+                    if (listFilter.evaluate(next)) {
+                        features.add(next);
+                    }
+                // END OF HACK
+                } else {
+                    features.add(next);
+                }
+            // HACK HACK HACK
+            // evaluate filter that applies to this list as we want a subset
+            // instead of full result
+            // this is a temporary solution for Bureau of Meteorology
+            // requirement for timePositionList
+            } else if (listFilter == null || listFilter.evaluate(next)) {
+            // END OF HACK
                 curSrcFeature = next;
                 break;
             }
@@ -767,6 +797,8 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
                 query.setCoordinateSystemReproject(reprojection);
             }
         }
+        
+        Filter fidFilter;
 
         if (mapping.getFeatureIdExpression().equals(Expression.NIL)) {
             // no real feature id mapping,
@@ -774,16 +806,30 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
             Set<FeatureId> ids = new HashSet<FeatureId>();
             FeatureId featureId = namespaceAwareFilterFactory.featureId(fId);
             ids.add(featureId);
-            query.setFilter(namespaceAwareFilterFactory.id(ids));
-            matchingFeatures = this.mappedSource.getFeatures(query);
+            fidFilter = namespaceAwareFilterFactory.id(ids);
         } else {
             // in case the expression is wrapped in a function, eg. strConcat
             // that's why we don't always filter by id, but do a PropertyIsEqualTo
-            query.setFilter(namespaceAwareFilterFactory.equals(mapping.getFeatureIdExpression(),
-                    namespaceAwareFilterFactory.literal(fId)));
-            matchingFeatures = this.mappedSource.getFeatures(query);
+            fidFilter = namespaceAwareFilterFactory.equals(mapping.getFeatureIdExpression(),
+                    namespaceAwareFilterFactory.literal(fId));
         }
+        
+        // HACK HACK HACK
+        // evaluate filter that applies to this list as we want a subset
+        // instead of full result
+        // this is a temporary solution for Bureau of Meteorology
+        // requirement for timePositionList
+        if (listFilter != null) {
+            List<Filter> filters = new ArrayList<Filter>();
+            filters.add(listFilter);
+            filters.add(fidFilter);
+            fidFilter = namespaceAwareFilterFactory.and(filters);
+        }
+        // END OF HACK
 
+        query.setFilter(fidFilter);
+        matchingFeatures = this.mappedSource.getFeatures(query);
+        
         FeatureIterator<? extends Feature> iterator = matchingFeatures.features();
 
         List<Feature> features = new ArrayList<Feature>();
@@ -831,22 +877,61 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
         }
         return sources;
     }
+    
+    private GeometryDescriptor reprojectGeometry(GeometryDescriptor descr) {
+    	if (descr == null) {
+    		return null;
+    	}
+    	GeometryType type = ftf.createGeometryType(descr.getType().getName(), descr.getType().getBinding(), reprojection, descr.getType().isIdentified(), descr.getType().isAbstract(), descr.getType().getRestrictions(), descr.getType().getSuper(), descr.getType().getDescription());
+    	type.getUserData().putAll(descr.getType().getUserData());
+    	GeometryDescriptor gd = ftf.createGeometryDescriptor(type, descr.getName(), descr.getMinOccurs(), descr.getMaxOccurs(), descr.isNillable(), descr.getDefaultValue());
+    	gd.getUserData().putAll(descr.getUserData());
+    	return gd;
+    }
+
+    private FeatureType reprojectType(FeatureType type) {
+    	Collection<PropertyDescriptor> schema = new ArrayList<PropertyDescriptor>();
+    	
+    	for (PropertyDescriptor descr : type.getDescriptors()) {
+    		if (descr instanceof GeometryDescriptor) {
+    			schema.add(reprojectGeometry((GeometryDescriptor)descr));    			
+    			}
+    		else {
+    			schema.add(descr);
+    		}
+    	}
+    	
+    	FeatureType ft = ftf.createFeatureType(type.getName(), schema, reprojectGeometry(type.getGeometryDescriptor()), type.isAbstract(), type.getRestrictions(), type.getSuper(), type.getDescription());
+    	ft.getUserData().putAll(type.getUserData());
+    	return ft;
+    }
+
+    
+    private AttributeDescriptor reprojectAttribute(AttributeDescriptor descr) {
+    	
+    	if ( reprojection != null && descr.getType() instanceof FeatureType ) {    	
+    		AttributeDescriptor ad = ftf.createAttributeDescriptor(reprojectType((FeatureType) descr.getType()), descr.getName(), descr.getMinOccurs(), descr.getMaxOccurs(), descr.isNillable(), descr.getDefaultValue());
+    		ad.getUserData().putAll(descr.getUserData());
+    		return ad;
+    	} else {    		
+    		return descr;
+    	}
+    }
 
     protected Feature computeNext() throws IOException {
 
         String id = getNextFeatureId();
         List<Feature> sources = getSources(id);
 
-        final AttributeDescriptor targetNode = mapping.getTargetFeature();
-        final Name targetNodeName = targetNode.getName();
+        final Name targetNodeName = targetFeature.getName();
 
         AttributeBuilder builder = new AttributeBuilder(attf);
-        builder.setDescriptor(targetNode);
+        builder.setDescriptor(targetFeature);
         Feature target = (Feature) builder.build(id);
 
         for (AttributeMapping attMapping : selectedMapping) {
             try {
-                if (skipTopElement(targetNodeName, attMapping.getTargetXPath(), targetNode.getType())) {
+                if (skipTopElement(targetNodeName, attMapping.getTargetXPath(), targetFeature.getType())) {
                     // ignore the top level mapping for the Feature itself
                     // as it was already set
                     continue;
@@ -855,18 +940,12 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
                     Attribute instance = setAttributeValue(target, null, sources.get(0),
                             attMapping, null, null, selectedProperties.get(attMapping));
                     if (sources.size() > 1 && instance != null) {
-                        Object[] values = new Object[sources.size()];
+                        List<Object> values = new ArrayList<Object>();
                         Expression sourceExpr = attMapping.getSourceExpression();
-                        int i = 0;
                         for (Feature source : sources) {
-                            values[i] = getValue(sourceExpr, source);
-                            i++;
-                        }                        
-                        if (comparator == null) {
-                            comparator = new ValueComparator();
+                            values.add(getValue(sourceExpr, source));                        
                         }
-                        Arrays.sort(values, comparator);
-                        String valueString = StringUtils.join(values, " ");
+                        String valueString = StringUtils.join(values.iterator(), " ");
                         StepList fullPath = attMapping.getTargetXPath();
                         StepList leafPath = fullPath.subList(fullPath.size() - 1, fullPath.size());
                         if (instance instanceof ComplexAttributeImpl) {              
@@ -885,7 +964,17 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
                         setAttributeValue(target, null, source, attMapping, null, null, selectedProperties.get(attMapping));
                     }
                 } else {
-                    setAttributeValue(target, null, sources.get(0), attMapping, null, null, selectedProperties.get(attMapping));
+                    String indexString = attMapping.getSourceIndex();
+                    // if not specified, get the first row by default
+                    int index = 0;
+                    if (indexString != null) {
+                        if (ComplexFeatureConstants.LAST_INDEX.equals(indexString)) {
+                            index = sources.size() - 1;
+                        } else {
+                            index = Integer.parseInt(indexString);
+                        }
+                    }
+                    setAttributeValue(target, null, sources.get(index), attMapping, null, null, selectedProperties.get(attMapping));
                     // When a feature is not multi-valued but still has multiple rows with the same ID in
                     // a denormalised table, by default app-schema only takes the first row and ignores
                     // the rest (see above). The following line is to make sure that the cursors in the
@@ -992,6 +1081,7 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
             sourceFeatureIterator = null;
             sourceFeatures = null;
             filteredFeatures = null;
+            listFilter = null;
 
             //NC - joining nested atts
             for (AttributeMapping attMapping : selectedMapping) {
@@ -1123,4 +1213,8 @@ public class DataAccessMappingFeatureIterator extends AbstractMappingFeatureIter
     public boolean isReprojectionCrsEqual(CoordinateReferenceSystem source,CoordinateReferenceSystem target) {
         return CRS.equalsIgnoreMetadata(source,target);
     }
+    
+    public void setListFilter(Filter filter) {
+        listFilter = filter;
+    } 
 }

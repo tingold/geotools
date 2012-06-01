@@ -5,6 +5,7 @@ import org.geotools.process.factory.DescribeProcess;
 import org.geotools.process.feature.gs.AggregateProcess;
 import org.geotools.process.feature.gs.BoundsProcess;
 import org.geotools.process.feature.gs.BufferFeatureCollection;
+import org.geotools.process.feature.gs.CentroidProcess;
 import org.geotools.process.feature.gs.ClipProcess;
 import org.geotools.process.feature.gs.CollectGeometries;
 import org.geotools.process.feature.gs.CountProcess;
@@ -42,6 +43,7 @@ public class FeatureGSProcessFactory extends AnnotatedBeanProcessFactory {
                 AggregateProcess.class,
                 BoundsProcess.class,
                 BufferFeatureCollection.class,
+                CentroidProcess.class,
                 ClipProcess.class,
                 CollectGeometries.class,
                 CountProcess.class,
@@ -59,7 +61,10 @@ public class FeatureGSProcessFactory extends AnnotatedBeanProcessFactory {
                 UnionFeatureCollection.class,
                 UniqueProcess.class,
                 VectorZonalStatistics.class,
-                TransformProcess.class);
+                TransformProcess.class,
+                LRSGeocodeProcess.class,
+                LRSMeasureProcess.class,
+                LRSSegmentProcess.class);
     }
 
 }

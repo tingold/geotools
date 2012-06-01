@@ -18,8 +18,12 @@ package org.geotools.gml3.bindings;
 
 import javax.xml.namespace.QName;
 
+import org.geotools.geometry.jts.coordinatesequence.CoordinateSequences;
+import org.geotools.gml2.SrsSyntax;
 import org.geotools.gml3.GML;
+import org.geotools.gml3.GMLConfiguration;
 import org.geotools.xml.AbstractComplexBinding;
+import org.geotools.xml.Configuration;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
@@ -66,6 +70,22 @@ import com.vividsolutions.jts.geom.Geometry;
  * @source $URL$
  */
 public class AbstractGeometryTypeBinding extends AbstractComplexBinding {
+    Configuration config;
+    SrsSyntax srsSyntax;
+
+    public AbstractGeometryTypeBinding(Configuration config, SrsSyntax srsSyntax) {
+        this.config = config;
+        this.srsSyntax = srsSyntax;
+    }
+
+    public void setConfiguration(Configuration config) {
+        this.config = config;
+    }
+
+    public void setSrsSyntax(SrsSyntax srsSyntax) {
+        this.srsSyntax = srsSyntax;
+    }
+
     /**
      * @generated
      */
@@ -111,15 +131,22 @@ public class AbstractGeometryTypeBinding extends AbstractComplexBinding {
         if ("srsName".equals(name.getLocalPart())) {
             CoordinateReferenceSystem crs = GML3EncodingUtils.getCRS(geometry);
             if (crs != null) {
-                return GML3EncodingUtils.toURI(crs);
+                return GML3EncodingUtils.toURI(crs, srsSyntax);
             }
         }
 
         if ("srsDimension".equals(name.getLocalPart())) {
-            CoordinateReferenceSystem crs = GML3EncodingUtils.getCRS(geometry);
-            if (crs != null) {
-                return crs.getCoordinateSystem().getDimension();
+            //check if srsDimension is turned off
+            if (config.hasProperty(GMLConfiguration.NO_SRS_DIMENSION)) {
+                return null;
             }
+
+            /**
+             * For the dimension, use the actual dimension of the geometry. Using
+             * the dimension of the CRS is not sufficient, since currently CRSes
+             * don't support 3D.
+             */
+            return CoordinateSequences.coordinateDimension(geometry);
         }
 
         // FIXME: should be gml:id, but which GML?

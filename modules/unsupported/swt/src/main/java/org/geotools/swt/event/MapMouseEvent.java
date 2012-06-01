@@ -97,6 +97,28 @@ public final class MapMouseEvent {
     }
 
     /**
+     * The button that was pressed or released; 1 for the
+     * first button, 2 for the second button, and 3 for the
+     * third button, etc. On mouse dragging this function may
+     * return 0.
+     *
+     * @return the button that was pressed or released
+     * @see MouseEvent#button
+     */
+    public int getMouseButton() {
+        return event.button;
+    }
+
+    /**
+     * Returns the state mask of the mouse event.
+     * @return the state mask
+     * @see MouseEvent#stateMask
+     */
+    public int getStateMask() {
+    	return event.stateMask;
+    }
+
+    /**
      * Get the position, in map (world) coordinates of this mouse event
      * 
      * @return a new DirectPosition2D object for the world coordinates

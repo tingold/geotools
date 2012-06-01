@@ -45,6 +45,7 @@ import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.identity.FeatureId;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.xml.sax.helpers.NamespaceSupport;
+import java.util.Collections;
 
 /**
  * This class represents AttributeMapping for attributes that are nested inside another complex
@@ -127,7 +128,7 @@ public class NestedAttributeMapping extends AttributeMapping {
             StepList targetXPath, boolean isMultiValued, Map<Name, Expression> clientProperties,
             Expression sourceElement, StepList sourcePath, NamespaceSupport namespaces)
             throws IOException {
-        super(idExpression, parentExpression, targetXPath, null, isMultiValued, clientProperties);
+        super(idExpression, parentExpression, null, targetXPath, null, isMultiValued, clientProperties);
         this.nestedTargetXPath = sourcePath;
         this.nestedFeatureType = sourceElement;
         this.filterFac = new FilterFactoryImplNamespaceAware(namespaces);
@@ -355,6 +356,10 @@ public class NestedAttributeMapping extends AttributeMapping {
     public List<Feature> getFeatures(Object source, Object foreignKeyValue,  List<Object> idValues, 
             CoordinateReferenceSystem reprojection, Object feature, List<PropertyName> selectedProperties, boolean includeMandatory) throws IOException {
 
+    	if (foreignKeyValue == null) {    		
+    		return Collections.<Feature>emptyList();
+    	}
+    	
         if (isSameSource()) {
             // if linkField is null, this method shouldn't be called because the mapping
             // should use the same table, and handles it differently

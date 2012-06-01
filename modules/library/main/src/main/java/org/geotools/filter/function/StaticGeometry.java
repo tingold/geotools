@@ -26,6 +26,7 @@ import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.Polygon;
+import com.vividsolutions.jts.geom.OctagonalEnvelope;
 import com.vividsolutions.jts.io.WKTReader;
 
 
@@ -438,16 +439,28 @@ import com.vividsolutions.jts.io.WKTReader;
            return _this.getInteriorRingN(arg1);
      }
      
-     static public Geometry minimumCircle(Geometry arg0) {
-         if (arg0 == null) return null;
-         MinimumBoundingCircle circle = new MinimumBoundingCircle(arg0);
+     static public Geometry minimumCircle(Geometry g) {
+         if (g == null) return null;
+         MinimumBoundingCircle circle = new MinimumBoundingCircle(g);
          return circle.getCircle();
      }
      
-     static public Geometry minimumRectangle(Geometry arg0) {
-         if (arg0 == null) return null;
-         MinimumDiameter min = new MinimumDiameter(arg0);
+     static public Geometry minimumRectangle(Geometry g) {
+         if (g == null) return null;
+         MinimumDiameter min = new MinimumDiameter(g);
          return min.getMinimumRectangle();
+     }
+
+     static public Geometry octagonalEnvelope(Geometry arg0) {
+         if (arg0 == null) return null;
+         OctagonalEnvelope env = new OctagonalEnvelope(arg0);
+         return env.toGeometry(arg0.getFactory());
+     }
+     
+     static public Geometry minimumDiameter(Geometry arg0) {
+         if (arg0 == null) return null;
+         MinimumDiameter minDiameter = new MinimumDiameter(arg0);
+         return minDiameter.getDiameter();
      }
 
  	//--------------------------------------------------------------------------
@@ -547,14 +560,14 @@ import com.vividsolutions.jts.io.WKTReader;
      static public String strSubstring(String s1, Integer beg, Integer end)
      {
         if (s1 == null || beg == null || end == null) return null;
-        if (beg < 0 || end < 0 || beg >= s1.length() || end >= s1.length()) return null;
+        if (beg < 0 || end > s1.length() || beg > end) return null;
      	return s1.substring(beg,end);
      }
   
      static public String strSubstringStart(String s1, Integer beg)
      {
         if (s1 == null || beg == null) return null;
-        if (beg < 0 || beg >= s1.length()) return null;
+        if (beg < 0 || beg > s1.length()) return null;
      	return s1.substring(beg);
      }
      

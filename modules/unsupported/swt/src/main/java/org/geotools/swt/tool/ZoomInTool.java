@@ -22,6 +22,7 @@ import static java.lang.Math.sqrt;
 
 import java.awt.geom.Point2D;
 
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Cursor;
 import org.eclipse.swt.graphics.Rectangle;
 import org.geotools.geometry.DirectPosition2D;
@@ -62,13 +63,27 @@ public class ZoomInTool extends AbstractZoomTool {
     private boolean dragged;
 
     /**
-     * Constructor
+     * Constructs a new zoom in tool. To activate the tool only on certain
+     * mouse events provide a single mask, e.g. {@link SWT#BUTTON1}, or
+     * a combination of multiple SWT-masks.
+     *
+     * @param triggerButtonMask Mouse button which triggers the tool's activation
+     * or {@value #ANY_BUTTON} if the tool is to be triggered by any button
      */
-    public ZoomInTool() {
+    public ZoomInTool(int triggerButtonMask) {
+        super(triggerButtonMask);
+
         cursor = CursorManager.getInstance().getZoominCursor();
 
         startDragPos = new DirectPosition2D();
         dragged = false;
+    }
+
+    /**
+     * Constructs a new zoom in tool which is triggered by any mouse button.
+     */
+    public ZoomInTool() {
+        this(CursorTool.ANY_BUTTON);
     }
 
     /**
@@ -80,6 +95,11 @@ public class ZoomInTool extends AbstractZoomTool {
      */
     @Override
     public void onMouseClicked( MapMouseEvent e ) {
+
+        if ( ! isTriggerMouseButton(e)) {
+            return;
+        }
+
         startDragPos = new DirectPosition2D();
         startDragPos.setLocation(e.getMapPosition());
     }
@@ -101,6 +121,11 @@ public class ZoomInTool extends AbstractZoomTool {
      */
     @Override
     public void onMouseDragged( MapMouseEvent ev ) {
+
+        if ( ! isTriggerMouseButton(ev)) {
+            return;
+        }
+
         dragged = true;
     }
 
@@ -114,6 +139,11 @@ public class ZoomInTool extends AbstractZoomTool {
      */
     @Override
     public void onMouseReleased( MapMouseEvent ev ) {
+
+        if ( ! isTriggerMouseButton(ev)) {
+            return;
+        }
+
         if (dragged) {
             Envelope2D env = new Envelope2D();
             env.setFrameFromDiagonal(startDragPos, ev.getMapPosition());
@@ -151,7 +181,12 @@ public class ZoomInTool extends AbstractZoomTool {
         return false;
     }
 
-    public static double pythagoras( double d1, double d2 ) {
+    @Override
+	public boolean isDrawing() {
+		return dragged;
+	}
+
+	public static double pythagoras( double d1, double d2 ) {
         return sqrt(pow(d1, 2.0) + pow(d2, 2.0));
     }
 }

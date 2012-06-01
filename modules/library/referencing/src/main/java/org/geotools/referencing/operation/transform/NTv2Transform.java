@@ -35,7 +35,9 @@ import org.geotools.referencing.factory.IdentifiedObjectSet;
 import org.geotools.referencing.factory.gridshift.GridShiftLocator;
 import org.geotools.referencing.factory.gridshift.NTv2GridShiftFactory;
 import org.geotools.referencing.operation.MathTransformProvider;
+import org.geotools.util.Utilities;
 import org.geotools.util.logging.Logging;
+import org.opengis.geometry.DirectPosition;
 import org.opengis.parameter.ParameterDescriptor;
 import org.opengis.parameter.ParameterDescriptorGroup;
 import org.opengis.parameter.ParameterNotFoundException;
@@ -134,6 +136,38 @@ public class NTv2Transform extends AbstractMathTransform implements MathTransfor
     }
     
     /**
+     * Returns a hash value for this transform.
+     */
+    @Override
+    public int hashCode() {
+        return this.grid.hashCode();
+    }
+    
+    /**
+     * Compares the specified object with this one for equality.
+     * Checks if {@code object} is {@code this} same instance, or a NTv2Transform
+     * with the same parameter values.
+     *
+     * @param object The object to compare with this transform.
+     * @return {@code true} if the given object is {@code this}, or
+     *         a NTv2Transform with same parameter values, which would
+     *         mean that given identical source position, the
+     *         {@linkplain #transform(DirectPosition,DirectPosition) transformed}
+     *         position would be the same.
+     */
+    @Override
+    public boolean equals(final Object object) {
+        if(object==this) return true;
+        
+        if (object!=null && getClass().equals(object.getClass())) {
+            final NTv2Transform that = (NTv2Transform) object;
+            return Utilities.equals(this.getParameterValues(),
+                                    that.getParameterValues());
+        }
+        return false;
+    }
+    
+    /**
      * Returns the inverse of this transform.
      *
      * @return the inverse of this transform
@@ -225,23 +259,25 @@ public class NTv2Transform extends AbstractMathTransform implements MathTransfor
         
         try {
             GridShift shift = new GridShift();
-            for (int i=0; i<srcPts.length; i=i+2) {
-                shift.setLonPositiveEastDegrees(srcPts[i]);
-                shift.setLatDegrees(srcPts[i+1]);
+            while(--numPts >= 0) {
+                shift.setLonPositiveEastDegrees(srcPts[srcOff++]);
+                shift.setLatDegrees(srcPts[srcOff++]);
                 if (forward) {
                     shifted = gridShift.gridShiftForward(shift);
                 } else {
                     shifted = gridShift.gridShiftReverse(shift);
                 }
                 if (shifted) {
-                    dstPts[i]=shift.getShiftedLonPositiveEastDegrees();
-                    dstPts[i+1]=shift.getShiftedLatDegrees();
+                    dstPts[dstOff++]=shift.getShiftedLonPositiveEastDegrees();
+                    dstPts[dstOff++]=shift.getShiftedLatDegrees();
                 } else {
-                    LOGGER.log(Level.WARNING, "Point (" + srcPts[i] + ", " + srcPts[i+1] +
-                            ") is not covered by '" + this.gridShift + "' NTv2 grid, " +
-            		    " it will not be shifted.");
-                    dstPts[i]=srcPts[i];
-                    dstPts[i+1]=srcPts[i+1];                    
+                    if(LOGGER.isLoggable(Level.FINE)) {
+                        LOGGER.log(Level.FINE, "Point (" + srcPts[srcOff-2] + ", " + srcPts[srcOff-1] +
+                                ") is not covered by '" + this.grid + "' NTv2 grid," +
+                		    " it will not be shifted.");
+                    }
+                    dstPts[dstOff++]=srcPts[srcOff-2];
+                    dstPts[dstOff++]=srcPts[srcOff-1];
                 }
             }
         } catch (IOException e) {

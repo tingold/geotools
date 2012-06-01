@@ -20,10 +20,13 @@ import java.util.List;
 
 import javax.xml.namespace.QName;
 
-import org.geotools.geometry.DirectPosition2D;
+import org.geotools.geometry.jts.LiteCoordinateSequence;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.gml2.SrsSyntax;
 import org.geotools.gml3.GML;
+import org.geotools.gml3.GMLConfiguration;
 import org.geotools.xml.AbstractComplexBinding;
+import org.geotools.xml.Configuration;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
 import org.opengis.geometry.DirectPosition;
@@ -86,6 +89,14 @@ import com.vividsolutions.jts.geom.Envelope;
  * @source $URL$
  */
 public class EnvelopeTypeBinding extends AbstractComplexBinding {
+    Configuration config;
+    SrsSyntax srsSyntax;
+
+    public EnvelopeTypeBinding(Configuration config, SrsSyntax srsSyntax) {
+        this.config = config;
+        this.srsSyntax = srsSyntax;
+    }
+
     /**
      * @generated
      */
@@ -166,19 +177,24 @@ public class EnvelopeTypeBinding extends AbstractComplexBinding {
         }
 
         if (name.getLocalPart().equals("lowerCorner")) {
-            return new DirectPosition2D(envelope.getMinX(), envelope.getMinY());
+        	return new LiteCoordinateSequence(new double[] { envelope.getMinX(), envelope.getMinY() }, 2);
         }
 
         if (name.getLocalPart().equals("upperCorner")) {
-            return new DirectPosition2D(envelope.getMaxX(), envelope.getMaxY());
+        	return new LiteCoordinateSequence(new double[] { envelope.getMaxX(), envelope.getMaxY() }, 2);
         }
 
         if (envelope instanceof ReferencedEnvelope) {
             String localName = name.getLocalPart();
             if (localName.equals("srsName")) {
                 return GML3EncodingUtils.toURI(((ReferencedEnvelope) envelope)
-                        .getCoordinateReferenceSystem());
+                        .getCoordinateReferenceSystem(), srsSyntax);
             } else if (localName.equals("srsDimension")) {
+                //check if srsDimension is turned off
+                if (config.hasProperty(GMLConfiguration.NO_SRS_DIMENSION)) {
+                    return null;
+                }
+
                 CoordinateReferenceSystem crs = ((ReferencedEnvelope) envelope)
                         .getCoordinateReferenceSystem();
                 if (crs != null) {

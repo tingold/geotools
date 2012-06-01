@@ -91,6 +91,17 @@ public class AppSchemaValidator {
     private AppSchemaValidator(AppSchemaResolver resolver) {
         this.resolver = resolver;
     }
+    
+    /**
+     * Construct an {@link AppSchemaValidator} that performs schema validation against schemas found
+     * using an {@link AppSchemaResolver} with a {@link AppSchemaCatalog}.
+     * 
+     * @param catalog
+     *            AppSchemaCatalog
+     */
+    private AppSchemaValidator(AppSchemaCatalog catalog) {
+        this(new AppSchemaResolver(catalog));
+    }
 
     /**
      * Return the list of failures found during parsing.
@@ -212,6 +223,17 @@ public class AppSchemaValidator {
     public static AppSchemaValidator buildValidator(AppSchemaResolver resolver) {
         return new AppSchemaValidator(resolver);
     }
+    
+    /**
+     * Construct an {@link AppSchemaValidator} that performs schema validation against schemas found
+     * using an {@link AppSchemaResolver} with a {@link AppSchemaCatalog}.
+     * 
+     * @param catalog
+     *            AppSchemaCatalog
+     */
+    public static AppSchemaValidator buildValidator(AppSchemaCatalog catalog) {
+        return new AppSchemaValidator(catalog);
+    }
 
     /**
      * 
@@ -225,12 +247,14 @@ public class AppSchemaValidator {
      * 
      * @param name
      *            resource name of XML instance document
+     * @param catalog 
+     *            AppSchemaCatalog to aide local schema resolution or null
      */
-    public static void validateResource(String name) {
+    public static void validateResource(String name, AppSchemaCatalog catalog) {
         InputStream input = null;
         try {
             input = AppSchemaValidator.class.getResourceAsStream(name);
-            validate(input);
+            validate(input, catalog);
         } finally {
             if (input != null) {
                 try {
@@ -254,8 +278,10 @@ public class AppSchemaValidator {
      * 
      * @param xml
      *            string containing XML instance document
+     * @param catalog
+     *            AppSchemaCatalog to aide local schema resolution or null
      */
-    public static void validate(String xml) {
+    public static void validate(String xml, AppSchemaCatalog catalog) {
         byte[] bytes = null;
         String encoding = getEncoding(xml);
         if (encoding != null) {
@@ -273,7 +299,7 @@ public class AppSchemaValidator {
         InputStream input = null;
         try {
             input = new ByteArrayInputStream(bytes);
-            validate(input);
+            validate(input, catalog);
         } finally {
             if (input != null) {
                 try {
@@ -314,9 +340,11 @@ public class AppSchemaValidator {
      * 
      * @param input
      *            stream providing XML instance document
+     * @param catalog
+     *            AppSchemaCatalog file to aide local schema resolution or null
      */
-    public static void validate(InputStream input) {
-        AppSchemaValidator validator = buildValidator();
+    public static void validate(InputStream input, AppSchemaCatalog catalog) {
+        AppSchemaValidator validator = buildValidator(catalog);
         validator.parse(input);
         validator.checkForFailures();
     }

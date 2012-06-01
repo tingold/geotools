@@ -524,9 +524,9 @@ public class SLDTransformer extends TransformerBase {
                 if(!"ramp".equals(typeString)) {
                     atts.addAttribute("", "type", "type", "", typeString);
                 }
-                
-                if(colorMap.getExtendedColors()) {
-                    atts.addAttribute("", "extended", "extended", "", typeString);
+                final boolean extended = colorMap.getExtendedColors();
+                if(extended) {
+                    atts.addAttribute("", "extended", "extended", "", ""+extended);
                 }
 
                 start("ColorMap", atts);
@@ -992,6 +992,10 @@ public class SLDTransformer extends TransformerBase {
 
             if ((fts.featureTypeNames() != null) && (fts.featureTypeNames().size() > 0)) {
                 element("FeatureTypeName", fts.featureTypeNames().iterator().next().toString());
+            }
+            
+            if (fts.getTransformation() != null) {
+                element("Transformation", fts.getTransformation());
             }
 
             String[] sti = fts.getSemanticTypeIdentifiers();

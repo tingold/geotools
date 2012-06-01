@@ -18,23 +18,27 @@
 package org.geotools.data.complex;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.logging.Logger;
 
 import org.geotools.data.FeatureSource;
 import org.geotools.data.Query;
 import org.geotools.data.complex.config.AppSchemaDataAccessConfigurator;
 import org.geotools.data.complex.filter.ComplexFilterSplitter;
+import org.geotools.data.complex.filter.XPath;
+import org.geotools.data.complex.filter.XPath.StepList;
 import org.geotools.data.joining.JoiningQuery;
 import org.geotools.feature.Types;
 import org.geotools.filter.FidFilterImpl;
 import org.geotools.filter.FilterCapabilities;
-import org.geotools.filter.NestedAttributeExpression;
 import org.geotools.filter.visitor.DefaultFilterVisitor;
 import org.geotools.jdbc.JDBCFeatureSource;
 import org.geotools.jdbc.JDBCFeatureStore;
+import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.filter.Filter;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.xml.sax.helpers.NamespaceSupport;
 
 /**
  * @author Russell Petty (GeoScience Victoria)
@@ -49,13 +53,61 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
 public class MappingFeatureIteratorFactory {
     protected static final Logger LOGGER = org.geotools.util.logging.Logging
             .getLogger("org.geotools.data.complex");    
+    
+    /**
+     * Temporary filter visitor to determine whether the filter concerns any attribute mapping that
+     * has isList enabled. This is because Bureau of Meteorology requires a subset of the property
+     * value to be returned, instead of the full value. This should be a temporary solution. This
+     * won't work with feature chaining at the moment.
+     * 
+     * @author Rini Angreani (CSIRO Earth Science and Resource Engineering)
+     * 
+     */
+    static class IsListFilterVisitor extends DefaultFilterVisitor {
+
+        // Attribute mappings that have isList enabled
+        private List<AttributeMapping> listMappings;
+
+        // True if the filter has properties that are configured as isList
+        private boolean isListFilter;
+
+        private FeatureTypeMapping mappings;
+
+        public IsListFilterVisitor(List<AttributeMapping> listMappings, FeatureTypeMapping mappings) {
+            this.listMappings = listMappings;
+            this.mappings = mappings;
+            isListFilter = false;
+        }
+
+        @Override
+        public Object visit(PropertyName expression, Object extraData) {
+            AttributeDescriptor root = mappings.getTargetFeature();
+            String attPath = expression.getPropertyName();
+            NamespaceSupport namespaces = mappings.getNamespaces();
+            StepList simplifiedSteps = XPath.steps(root, attPath, namespaces);
+            StepList targetXpath;
+            for (AttributeMapping mapping : listMappings) {
+                targetXpath = mapping.getTargetXPath();
+                if (targetXpath.equals(simplifiedSteps)) {
+                    // TODO: support feature chaining too?
+                    isListFilter = true;
+                    return extraData;
+                }
+            }
+            return extraData;
+        }
+
+        public boolean isListFilterExists() {
+            return isListFilter;
+        }
+    }
 
     public static IMappingFeatureIterator getInstance(AppSchemaDataAccess store,
             FeatureTypeMapping mapping, Query query, Filter unrolledFilter) throws IOException {
 
         if (mapping instanceof XmlFeatureTypeMapping) {
             return new XmlMappingFeatureIterator(store, mapping, query);
-        }
+        }        
 
         boolean isJoining = AppSchemaDataAccessConfigurator.isJoining();
 
@@ -78,6 +130,19 @@ public class MappingFeatureIteratorFactory {
                         unrolledQuery);
             }
         } else {
+            // HACK HACK HACK
+            // experimental/temporary solution for isList subsetting by filtering
+            List<AttributeMapping> listMappings = mapping.getIsListMappings();
+            Filter isListFilter = null;
+            if (!listMappings.isEmpty()) {
+                IsListFilterVisitor listChecker = new IsListFilterVisitor(listMappings, mapping);
+                Filter complexFilter = query.getFilter();
+                complexFilter.accept(listChecker, null);
+                if (listChecker.isListFilterExists()) {
+                    isListFilter = AppSchemaDataAccess.unrollFilter(complexFilter, mapping);
+                }
+            }
+            // END OF HACK
             FeatureSource mappedSource = mapping.getSource();
             if (isJoining || mappedSource instanceof JDBCFeatureSource
                     || mappedSource instanceof JDBCFeatureStore) {
@@ -99,9 +164,14 @@ public class MappingFeatureIteratorFactory {
                 // to find denormalised rows that match the id (but doesn't match pre filter)
                 boolean isFiltered = !isJoining && preFilter != null && preFilter != Filter.INCLUDE;
                 iterator = new DataAccessMappingFeatureIterator(store, mapping, query, isFiltered);
-                if (filter != null && filter != Filter.INCLUDE) {
-                    iterator = new PostFilteringMappingFeatureIterator(iterator, filter,
+                // HACK HACK HACK
+                // experimental/temporary solution for isList subsetting by filtering
+                if (isListFilter == null) {
+                // END OF HACK
+                    if (filter != null && filter != Filter.INCLUDE) {
+                        iterator = new PostFilteringMappingFeatureIterator(iterator, filter,
                             maxFeatures);
+                    }
                 }
             } else if (mappedSource instanceof MappingFeatureSource) {
                 // web service data access wrapper
@@ -136,8 +206,13 @@ public class MappingFeatureIteratorFactory {
                     iterator = new DataAccessMappingFeatureIterator(store, mapping, query);
                 }
             }
+             // HACK HACK HACK
+            // experimental/temporary solution for isList subsetting by filtering
+            if (isListFilter != null && iterator instanceof DataAccessMappingFeatureIterator) {
+                ((DataAccessMappingFeatureIterator) iterator).setListFilter(isListFilter);
+            }
+            // END OF HACK
         }
-
         return iterator;
     }
 

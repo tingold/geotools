@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.geotools.data.jdbc.FilterToSQL;
+import org.geotools.factory.Hints;
 import org.geotools.factory.Hints.Key;
 import org.geotools.jdbc.JDBCDataStore;
 import org.geotools.jdbc.PreparedFilterToSQL;
@@ -112,6 +113,12 @@ public class DB2SQLDialectPrepared extends PreparedStatementSQLDialect {
         delegate.encodeGeometryColumn(gatt, prefix, srid, sql);
     }
 
+    @Override
+    public void encodeGeometryColumn(GeometryDescriptor gatt, String prefix,
+        int srid, Hints hints, StringBuffer sql) {
+        delegate.encodeGeometryColumn(gatt, prefix, srid, hints, sql);
+    }
+
 	@Override
     public void encodeGeometryEnvelope(String tableName,String geometryColumn, StringBuffer sql) {
 		delegate.encodeGeometryEnvelope(tableName, geometryColumn, sql);
@@ -177,7 +184,7 @@ public class DB2SQLDialectPrepared extends PreparedStatementSQLDialect {
         
 	@Override
 	public void setGeometryValue(Geometry g, int srid, Class binding, PreparedStatement ps, int column) throws SQLException {
-		if (g ==null) {		        
+		if (g ==null || g.isEmpty()) {		        
 			//ps.setNull(column, Types.OTHER);
 			ps.setBytes(column, null);
 			return;

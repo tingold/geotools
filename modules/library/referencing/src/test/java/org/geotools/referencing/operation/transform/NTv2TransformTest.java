@@ -19,6 +19,7 @@ package org.geotools.referencing.operation.transform;
 import static org.junit.Assert.*;
 
 import java.net.URI;
+import java.util.Arrays;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -106,6 +107,12 @@ public class NTv2TransformTest {
             new NTv2Transform(new URI(INEXISTENT_GRID));
         } catch (NoSuchIdentifierException e) {
             return;
+        }
+        
+        try {
+            new NTv2Transform(new URI(INEXISTENT_GRID));
+        } catch (NoSuchIdentifierException e) {
+            return;
         }            
     }
     
@@ -138,6 +145,21 @@ public class NTv2TransformTest {
         assertEquals(p[1], TEST_POINT_DST[1], TOLERANCE);
     }
     
+    @Test
+    public void testTransformTranslated() throws TransformException {
+        double[] src = new double[4];
+        double[] dst = new double[4];
+        src[2] = TEST_POINT_SRC[0];
+        src[3] = TEST_POINT_SRC[1];
+        
+        transform.transform(src, 2, dst, 2, 1);
+        assertEquals(0, dst[0], TOLERANCE);
+        assertEquals(0, dst[1], TOLERANCE);
+        assertEquals(dst[2], TEST_POINT_DST[0], TOLERANCE);
+        assertEquals(dst[3], TEST_POINT_DST[1], TOLERANCE);
+    }
+
+    
     /**
      * Test method for {@link org.geotools.referencing.operation.transform.NTv2Transform#inverseTransform(double[], int, double[], int, int)}.
      * @throws TransformException 
@@ -148,6 +170,27 @@ public class NTv2TransformTest {
         transform.inverseTransform(TEST_POINT_DST, 0, p, 0, 1);
         assertEquals(p[0], TEST_POINT_SRC[0], TOLERANCE);
         assertEquals(p[1], TEST_POINT_SRC[1], TOLERANCE);
+    }
+    
+    @Test
+    public void testInverseTransformTranslated() throws TransformException {
+        double[] src = new double[4];
+        double[] dst = new double[4];
+        src[2] = TEST_POINT_DST[0];
+        src[3] = TEST_POINT_DST[1];
+        
+        transform.inverseTransform(src, 2, dst, 2, 1);
+        assertEquals(0, dst[0], TOLERANCE);
+        assertEquals(0, dst[1], TOLERANCE);
+        assertEquals(dst[2], TEST_POINT_SRC[0], TOLERANCE);
+        assertEquals(dst[3], TEST_POINT_SRC[1], TOLERANCE);
+    }
+    
+    @Test
+    public void testHashCodeEquals() throws Exception {
+        NTv2Transform t2 = new NTv2Transform(new URI(TEST_GRID));
+        assertEquals(transform, t2);
+        assertEquals(transform.hashCode(), t2.hashCode());
     }
 
 }

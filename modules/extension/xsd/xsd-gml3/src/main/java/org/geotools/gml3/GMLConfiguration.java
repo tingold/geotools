@@ -19,6 +19,7 @@ package org.geotools.gml3;
 import javax.xml.namespace.QName;
 
 import org.geotools.gml2.FeatureTypeCache;
+import org.geotools.gml2.SrsSyntax;
 import org.geotools.gml2.bindings.GMLCoordTypeBinding;
 import org.geotools.gml2.bindings.GMLCoordinatesTypeBinding;
 import org.geotools.gml3.bindings.AbstractFeatureCollectionTypeBinding;
@@ -116,10 +117,21 @@ public class GMLConfiguration extends Configuration {
     public static final QName ENCODE_FEATURE_MEMBER = org.geotools.gml2.GMLConfiguration.ENCODE_FEATURE_MEMBER;
 
     /**
+     * Boolean property which controls whether geometry and envelope objects are encoded with an 
+     * srs dimension attribute.
+     */
+    public static final QName NO_SRS_DIMENSION = new QName( "org.geotools.gml", "noSrsDimension" );
+
+    /**
      * extended support for arcs and surface flag
      */
     boolean extArcSurfaceSupport = false;
-    
+
+    /**
+     * Srs name style to encode srsName URI's with
+     */
+    protected SrsSyntax srsSyntax = SrsSyntax.OGC_URN_EXPERIMENTAL;
+
     public GMLConfiguration() {
         this(false);
     }
@@ -139,6 +151,23 @@ public class GMLConfiguration extends Configuration {
         //add parser properties
         getProperties().add(Parser.Properties.PARSE_UNKNOWN_ELEMENTS);
         getProperties().add(Parser.Properties.PARSE_UNKNOWN_ATTRIBUTES);
+    }
+
+    /**
+     * Sets the syntax to use for encoding srs uris.
+     * <p>
+     * If this method is not explicitly called {@link SrsSyntax#URN} is used as the default.
+     * </p>
+     */
+    public void setSrsSyntax(SrsSyntax srsSyntax) {
+        this.srsSyntax = srsSyntax;
+    }
+
+    /**
+     * Returns the syntax to use for encoding srs uris.
+     */
+    public SrsSyntax getSrsSyntax() {
+        return srsSyntax;
     }
 
     /**
@@ -308,5 +337,7 @@ public class GMLConfiguration extends Configuration {
         if (isExtendedArcSurfaceSupport()) {
             container.registerComponentInstance(new ArcParameters());
         }
+
+        container.registerComponentInstance(srsSyntax);
     }
 }

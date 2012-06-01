@@ -28,6 +28,7 @@ import junit.framework.TestCase;
 import org.apache.xerces.parsers.SAXParser;
 import org.eclipse.xsd.XSDSchema;
 import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.gml2.SrsSyntax;
 import org.geotools.gml3.bindings.GML3MockData;
 import org.geotools.gml3.bindings.TEST;
 import org.geotools.gml3.bindings.TestConfiguration;
@@ -120,8 +121,8 @@ public class GML3EncodingTest extends TestCase {
             return;
         }
 
-        String schemaLocation = new File(TestConfiguration.class.getResource("test.xsd").getFile())
-            .getAbsolutePath();
+        // The schema location needs to be a well formed URI/URL, a file path is not sufficient.
+        String schemaLocation = TestConfiguration.class.getResource("test.xsd").toString();
 
         ApplicationSchemaConfiguration configuration = new ApplicationSchemaConfiguration(TEST.NAMESPACE,
                 schemaLocation);
@@ -192,5 +193,32 @@ public class GML3EncodingTest extends TestCase {
         Document dom = encoder.encodeAsDOM(feature, TEST.TestFeature );
         
         assertEquals( 0, dom.getElementsByTagName("gml:boundedBy").getLength());
+    }
+
+    public void testEncodeWithNoSrsDimension() throws Exception {
+        GMLConfiguration gml = new GMLConfiguration();
+        Document dom = new Encoder(gml).encodeAsDOM(GML3MockData.point(), GML.Point);
+        assertTrue(dom.getDocumentElement().hasAttribute("srsDimension"));
+
+        gml.getProperties().add(GMLConfiguration.NO_SRS_DIMENSION);
+        dom = new Encoder(gml).encodeAsDOM(GML3MockData.point(), GML.Point);
+        assertFalse(dom.getDocumentElement().hasAttribute("srsDimension"));
+    }
+
+    public void testEncodeSrsSyntax() throws Exception {
+        GMLConfiguration gml = new GMLConfiguration();
+        Document dom = new Encoder(gml).encodeAsDOM(GML3MockData.point(), GML.Point);
+        assertTrue(dom.getDocumentElement().getAttribute("srsName")
+            .startsWith("urn:x-ogc:def:crs:EPSG:"));
+
+        gml.setSrsSyntax(SrsSyntax.OGC_URN);
+        dom = new Encoder(gml).encodeAsDOM(GML3MockData.point(), GML.Point);
+        assertTrue(dom.getDocumentElement().getAttribute("srsName")
+            .startsWith("urn:ogc:def:crs:EPSG::"));
+
+        gml.setSrsSyntax(SrsSyntax.OGC_HTTP_URI);
+        dom = new Encoder(gml).encodeAsDOM(GML3MockData.point(), GML.Point);
+        assertTrue(dom.getDocumentElement().getAttribute("srsName")
+            .startsWith("http://www.opengis.net/def/crs/EPSG/0/"));
     }
 }

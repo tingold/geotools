@@ -16,12 +16,9 @@
  */
 package org.geotools.image;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
+
+import it.geosolutions.imageioimpl.plugins.tiff.TIFFImageReaderSpi;
 
 import java.awt.Color;
 import java.awt.Transparency;
@@ -43,8 +40,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Random;
+import java.util.zip.GZIPInputStream;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import javax.media.jai.ImageLayout;
 import javax.media.jai.JAI;
 import javax.media.jai.RasterFactory;
@@ -60,6 +60,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.sun.media.imageioimpl.common.PackageUtil;
+import com.sun.media.imageioimpl.plugins.tiff.TIFFImageReader;
 
 
 /**
@@ -396,6 +397,36 @@ public final class ImageWorkerTest {
         worker.writePNG(outFile, "FILTERED", 0.75f, false, false);
         readWorker.setImage(ImageIO.read(outFile));
         assertTrue(readWorker.getRenderedImage().getColorModel() instanceof IndexColorModel);
+    }
+    
+    @Test
+    public void test16BitPNG() throws Exception {
+        // the resource has been compressed since the palette is way larger than the image itself, 
+        // and the palette does not get compressed
+        InputStream gzippedStream = ImageWorkerTest.class.getResource("test-data/sf-sfdem.tif.gz").openStream();
+        GZIPInputStream is = new GZIPInputStream(gzippedStream);
+        try {
+            ImageInputStream iis = ImageIO.createImageInputStream(is);
+            ImageReader reader = new TIFFImageReaderSpi().createReaderInstance(iis);
+            reader.setInput(iis);
+            BufferedImage bi = reader.read(0);
+            IndexColorModel icm = (IndexColorModel) bi.getColorModel();
+            assertEquals(65536, icm.getMapSize());
+            
+            final File outFile = TestData.temp(this, "temp.png");
+            ImageWorker worker = new ImageWorker(bi);
+            worker.writePNG(outFile, "FILTERED", 0.75f, true, false);
+            worker.dispose();
+            
+            // make sure we can read it 
+            BufferedImage back = ImageIO.read(outFile);
+            
+            // we expect a RGB one
+            ComponentColorModel ccm = (ComponentColorModel) back.getColorModel();
+            assertEquals(3, ccm.getNumColorComponents());
+        } finally {
+            is.close();
+        }
     }
     
     /**
