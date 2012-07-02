@@ -108,6 +108,7 @@ import org.opengis.filter.temporal.TOverlaps;
 import org.opengis.temporal.Period;
 
 import com.vividsolutions.jts.geom.Geometry;
+import java.util.*;
 
 /**
  * Encodes a filter into a SQL WHERE statement.  It should hopefully be generic
@@ -1388,7 +1389,7 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
           out.write("NULL");
         } else if(literal instanceof Number || literal instanceof Boolean) {
             out.write(String.valueOf(literal));
-        } else {
+        } else if (! encodeDate(literal)) {
             // we don't know the type...just convert back to a string
             String encoding = (String) Converters.convert(literal,
                     String.class, null);
@@ -1401,7 +1402,28 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
             String escaped = encoding.replaceAll("'", "''");
             out.write("'" + escaped + "'");
         }
-    } 
+    }
+    
+    private boolean encodeDate(Object literal) throws IOException {
+        Class clazz = literal.getClass();
+        boolean encode = false;
+        encode = clazz == java.util.Date.class 
+                || clazz == java.sql.Date.class 
+                || clazz == java.sql.Timestamp.class;
+        // ignore java.sql.Time class
+        if (encode) {
+            out.write('\'');
+
+            java.util.Date d = (java.util.Date) literal;
+            out.write(d.toString());
+            // BC - better to statically compute this than use a calendar here
+            if (d.getTime() < -62135769600000L) {
+                out.write(" BC");
+            }
+            out.write('\'');
+        }
+        return encode;
+    }
 
     /**
      * Subclasses must implement this method in order to encode geometry

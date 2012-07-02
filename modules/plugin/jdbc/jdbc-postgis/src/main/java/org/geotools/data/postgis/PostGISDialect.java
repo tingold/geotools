@@ -58,6 +58,9 @@ import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.Polygon;
 import com.vividsolutions.jts.io.ParseException;
 import com.vividsolutions.jts.io.WKTReader;
+import org.geotools.factory.Hints;
+import org.geotools.util.Converter;
+import org.geotools.util.ConverterFactory;
 
 /**
  * 
@@ -328,6 +331,10 @@ public class PostGISDialect extends BasicSQLDialect {
             return UUID.class;
         }
         
+        if ("bigdate".equalsIgnoreCase(typeName)) {
+            return XDate.class;
+        }
+        
         String gType = null;
         if ("geometry".equalsIgnoreCase(typeName)) {
             gType = lookupGeometryType(columnMetaData, cx, "geometry_columns", "f_geometry_column");
@@ -336,7 +343,7 @@ public class PostGISDialect extends BasicSQLDialect {
         } else {
             return null;
         }
-       
+        
         // decode the type into
         if(gType == null) {
             // it's either a generic geography or geometry not registered in the medatata tables
@@ -586,7 +593,10 @@ public class PostGISDialect extends BasicSQLDialect {
 
         // jdbc metadata for geom columns reports DATA_TYPE=1111=Types.OTHER
         mappings.put(Geometry.class, Types.OTHER);
+        mappings.put(XDate.class, 8675309);
     }
+    
+    
 
     @Override
     public void registerSqlTypeNameToClassMappings(
@@ -608,6 +618,8 @@ public class PostGISDialect extends BasicSQLDialect {
         mappings.put("timetz", Time.class);
         mappings.put("timestamp", Timestamp.class);
         mappings.put("timestamptz", Timestamp.class);
+
+        mappings.put("bigdate", XDate.class);
     }
     
     @Override
@@ -615,6 +627,7 @@ public class PostGISDialect extends BasicSQLDialect {
             Map<Integer, String> overrides) {
         overrides.put(Types.VARCHAR, "VARCHAR");
         overrides.put(Types.BOOLEAN, "BOOL");
+        overrides.put(8675309, "bigdate");
     }
 
     @Override
@@ -847,6 +860,8 @@ public class PostGISDialect extends BasicSQLDialect {
                 }
             }
             super.encodeValue(sb.toString(), String.class, sql);
+        } else if (type == PostGISDialect.XDate.class) {
+            sql.append( ((java.util.Date) value).getTime() );
         } else {
             super.encodeValue(value, type, sql);
         }
@@ -885,6 +900,18 @@ public class PostGISDialect extends BasicSQLDialect {
      */
     boolean supportsGeography(Connection cx) throws SQLException {
         return getVersion(cx).compareTo(V_1_5_0) >= 0;
+    }
+    
+    public static class XDate extends java.util.Date {
+
+        public XDate(long date) {
+            super(date);
+        }
+
+        public XDate() {
+            super();
+        }
+        
     }
     
 }
