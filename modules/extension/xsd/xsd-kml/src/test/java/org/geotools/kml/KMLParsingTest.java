@@ -143,7 +143,7 @@ public class KMLParsingTest extends TestCase {
         sb.add( gf.createPoint( new Coordinate(2, 2) ) ) ;
         features.add( sb.buildFeature("2"));
         
-        sb = new SimpleFeatureBuilder(DocumentTypeBinding.featureType);
+        sb = new SimpleFeatureBuilder(DocumentTypeBinding.FeatureType);
         sb.set( "Feature", features );
         SimpleFeature f = sb.buildFeature("kml");
         

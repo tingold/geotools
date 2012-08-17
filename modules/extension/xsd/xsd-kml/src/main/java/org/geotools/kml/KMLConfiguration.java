@@ -47,7 +47,6 @@ import org.geotools.kml.bindings.PointTypeBinding;
 import org.geotools.kml.bindings.PolyStyleTypeBinding;
 import org.geotools.kml.bindings.PolygonTypeBinding;
 import org.geotools.kml.bindings.RegionTypeBinding;
-import org.geotools.kml.bindings.StyleMap;
 import org.geotools.kml.bindings.StyleTypeBinding;
 import org.geotools.styling.StyleBuilder;
 import org.geotools.styling.StyleFactory;

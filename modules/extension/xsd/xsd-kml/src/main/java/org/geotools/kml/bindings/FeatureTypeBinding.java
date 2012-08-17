@@ -17,6 +17,9 @@
 package org.geotools.kml.bindings;
 
 import java.net.URI;
+import java.util.Map;
+import java.util.Set;
+
 import javax.xml.namespace.QName;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
@@ -26,6 +29,7 @@ import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.kml.KML;
+import org.geotools.kml.StyleMap;
 import org.geotools.styling.FeatureTypeStyle;
 import org.geotools.xml.AbstractComplexBinding;
 import org.geotools.xml.ElementInstance;
@@ -72,9 +76,9 @@ import org.geotools.xml.Node;
  */
 public class FeatureTypeBinding extends AbstractComplexBinding {
     /**
-     * base feature type for kml features
+     * base feature type for kml features, used when no Schema element is specified
      */
-    protected static final SimpleFeatureType featureType;
+    protected static final SimpleFeatureType FeatureType;
 
     static {
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
@@ -106,11 +110,11 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         //&lt;element minOccurs="0" ref="kml:Region"/&gt;
         tb.add("Region", Envelope.class);
 
-        featureType = tb.buildFeatureType();
+        FeatureType = tb.buildFeatureType();
     }
 
     StyleMap styleMap;
-
+    
     public FeatureTypeBinding(StyleMap styleMap) {
         this.styleMap = styleMap;
     }
@@ -140,7 +144,7 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
      */
     public Object parse(ElementInstance instance, Node node, Object value)
         throws Exception {
-        SimpleFeatureBuilder b = new SimpleFeatureBuilder(featureType);
+        SimpleFeatureBuilder b = new SimpleFeatureBuilder(FeatureType);
 
         //&lt;element minOccurs="0" name="name" type="string"/&gt;
         b.set("name", node.getChildValue("name"));
@@ -183,6 +187,14 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         //&lt;element minOccurs="0" ref="kml:Region"/&gt;
         b.set("Region", node.getChildValue("Region"));
 
+        //stick extended data in feature user data
+        Map extData = (Map) node.getChildValue("ExtendedData");
+        if (extData != null) {
+            for (Map.Entry kv : (Set<Map.Entry>)extData.entrySet()) {
+                b.featureUserData(kv.getKey(), kv.getValue());
+            }
+        }
+        
         //&lt;element minOccurs="0" name="Metadata" type="kml:MetadataType"/&gt;
         return b.buildFeature((String) node.getAttributeValue("id"));
     }
