@@ -22,6 +22,8 @@ import org.geotools.xml.AbstractComplexBinding;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
 
+import com.vividsolutions.jts.geom.Envelope;
+
 
 /**
  * Binding object for the type http://earth.google.com/kml/2.1:RegionType.
@@ -65,7 +67,7 @@ public class RegionTypeBinding extends AbstractComplexBinding {
      * @generated modifiable
      */
     public Class getType() {
-        return null;
+        return Envelope.class;
     }
 
     /**
@@ -76,7 +78,11 @@ public class RegionTypeBinding extends AbstractComplexBinding {
      */
     public Object parse(ElementInstance instance, Node node, Object value)
         throws Exception {
-        //TODO: implement
-        return null;
+        Object latLonChildElement = node.getChildValue("LatLonAltBox");
+        if (latLonChildElement == null) {
+            return null;
+        }
+        Envelope region = (Envelope) latLonChildElement;
+        return region;
     }
 }
