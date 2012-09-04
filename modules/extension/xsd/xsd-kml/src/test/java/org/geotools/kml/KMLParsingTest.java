@@ -78,7 +78,7 @@ public class KMLParsingTest extends TestCase {
             FeatureTypeStyle style = (FeatureTypeStyle) f.getAttribute("Style");
             assertNotNull(style);
 
-            Symbolizer[] syms = style.getRules()[0].getSymbolizers();
+            Symbolizer[] syms = style.rules().get(0).getSymbolizers();
             assertEquals(3, syms.length);
 
             count++;
