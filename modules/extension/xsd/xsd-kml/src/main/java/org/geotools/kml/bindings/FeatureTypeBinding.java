@@ -34,7 +34,7 @@ import org.geotools.xml.Node;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 
-import com.vividsolutions.jts.geom.Envelope;
+import com.vividsolutions.jts.geom.LinearRing;
 import com.vividsolutions.jts.geom.Point;
 
 
@@ -110,7 +110,7 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         //&lt;element maxOccurs="unbounded" minOccurs="0" ref="kml:StyleSelector"/&gt;
 
         //&lt;element minOccurs="0" ref="kml:Region"/&gt;
-        tb.add("Region", Envelope.class);
+        tb.add("Region", LinearRing.class);
 
         FeatureType = tb.buildFeatureType();
     }

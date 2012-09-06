@@ -16,10 +16,12 @@
  */
 package org.geotools.kml.bindings;
 
-import com.vividsolutions.jts.geom.Envelope;
 import org.geotools.kml.KML;
 import org.geotools.kml.KMLTestSupport;
 import org.geotools.xml.Binding;
+
+import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.LinearRing;
 
 /**
  * 
@@ -28,7 +30,7 @@ import org.geotools.xml.Binding;
  */
 public class RegionTypeBindingTest extends KMLTestSupport {
     public void testType() {
-        assertEquals(Envelope.class, binding(KML.RegionType).getType());
+        assertEquals(LinearRing.class, binding(KML.RegionType).getType());
     }
 
     public void testExecutionMode() {
@@ -41,10 +43,13 @@ public class RegionTypeBindingTest extends KMLTestSupport {
 
         buildDocument(xml);
 
-        Envelope box = (Envelope) parse();
-        assertEquals(-1d, box.getMinX(), 0.1);
-        assertEquals(1d, box.getMaxX(), 0.1);
-        assertEquals(-1d, box.getMinY(), 0.1);
-        assertEquals(1d, box.getMaxY(), 0.1);
+        LinearRing box = (LinearRing) parse();
+        Coordinate[] coordinates = box.getCoordinates();
+        assertEquals("Invalid number of coordinates", 5, coordinates.length);
+        assertEquals(coordinates[0], new Coordinate(-1, -1));
+        assertEquals(coordinates[1], new Coordinate(-1, 1));
+        assertEquals(coordinates[2], new Coordinate(1, 1));
+        assertEquals(coordinates[3], new Coordinate(1, -1));
+        assertEquals("Last and first coordinates should be equal", coordinates[0], coordinates[4]);
     }
 }
