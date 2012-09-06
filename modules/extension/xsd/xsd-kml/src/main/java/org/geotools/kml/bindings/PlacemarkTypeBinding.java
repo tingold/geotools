@@ -70,6 +70,7 @@ public class PlacemarkTypeBinding extends AbstractComplexBinding {
 
         //&lt;element minOccurs="0" ref="kml:Geometry"/&gt;
         tb.add("Geometry", Geometry.class);
+        tb.setDefaultGeometry("Geometry");
 
         DefaultFeatureType = tb.buildFeatureType();
     }

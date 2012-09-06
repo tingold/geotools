@@ -21,10 +21,7 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.xml.namespace.QName;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Envelope;
-import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.feature.simple.SimpleFeatureType;
+
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
@@ -34,6 +31,11 @@ import org.geotools.styling.FeatureTypeStyle;
 import org.geotools.xml.AbstractComplexBinding;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
+
+import com.vividsolutions.jts.geom.Envelope;
+import com.vividsolutions.jts.geom.Point;
 
 
 /**
@@ -100,7 +102,7 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         //&lt;element minOccurs="0" name="description" type="string"/&gt;
         tb.add("description", String.class);
         //&lt;element minOccurs="0" ref="kml:LookAt"/&gt;
-        tb.add("LookAt", Coordinate.class);
+        tb.add("LookAt", Point.class);
         //&lt;element minOccurs="0" ref="kml:TimePrimitive"/&gt;
         //tb.add("TimePrimitive", ...);
         //&lt;element minOccurs="0" ref="kml:styleUrl"/&gt;
