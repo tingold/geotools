@@ -86,6 +86,7 @@ public class KMLConfiguration extends Configuration {
         container.registerComponentInstance(new GeometryFactory());
         container.registerComponentInstance(CoordinateArraySequenceFactory.instance());
         container.registerComponentInstance(new StyleMap());
+        container.registerComponentInstance(new FolderStack());
     }
 
     /**

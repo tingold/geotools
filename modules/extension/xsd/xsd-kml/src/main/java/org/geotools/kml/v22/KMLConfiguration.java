@@ -1,7 +1,7 @@
 package org.geotools.kml.v22;
 
-import org.eclipse.xsd.util.XSDSchemaLocationResolver;	
 import org.geotools.factory.CommonFactoryFinder;
+import org.geotools.kml.FolderStack;
 import org.geotools.kml.StyleMap;
 import org.geotools.kml.bindings.BoundaryTypeBinding;
 import org.geotools.kml.bindings.ColorBinding;
@@ -11,6 +11,7 @@ import org.geotools.kml.bindings.CoordinatesTypeBinding;
 import org.geotools.kml.bindings.DateTimeTypeBinding;
 import org.geotools.kml.bindings.DocumentTypeBinding;
 import org.geotools.kml.bindings.FeatureTypeBinding;
+import org.geotools.kml.bindings.FolderBinding;
 import org.geotools.kml.bindings.FolderTypeBinding;
 import org.geotools.kml.bindings.GeometryTypeBinding;
 import org.geotools.kml.bindings.KmlTypeBinding;
@@ -22,6 +23,7 @@ import org.geotools.kml.bindings.LocationTypeBinding;
 import org.geotools.kml.bindings.LookAtTypeBinding;
 import org.geotools.kml.bindings.MetadataTypeBinding;
 import org.geotools.kml.bindings.MultiGeometryTypeBinding;
+import org.geotools.kml.bindings.NameBinding;
 import org.geotools.kml.bindings.ObjectTypeBinding;
 import org.geotools.kml.bindings.PlacemarkTypeBinding;
 import org.geotools.kml.bindings.PointTypeBinding;
@@ -66,6 +68,7 @@ public class KMLConfiguration extends Configuration {
         container.registerComponentInstance(new GeometryFactory());
         container.registerComponentInstance(CoordinateArraySequenceFactory.instance());
         container.registerComponentInstance(new StyleMap());
+        container.registerComponentInstance(new FolderStack());
     }
 
     /**
@@ -110,6 +113,7 @@ public class KMLConfiguration extends Configuration {
         container.registerComponentImplementation(KML.DocumentType,DocumentTypeBinding.class);
         container.registerComponentImplementation(KML.ExtendedDataType,ExtendedDataTypeBinding.class);
         container.registerComponentImplementation(KML.FolderType,FolderTypeBinding.class);
+        container.registerComponentImplementation(KML.Folder,FolderBinding.class);
 //        container.registerComponentImplementation(KML.gridOriginEnumType,GridOriginEnumTypeBinding.class);
 //        container.registerComponentImplementation(KML.GroundOverlayType,GroundOverlayTypeBinding.class);
 //        container.registerComponentImplementation(KML.IconStyleType,IconStyleTypeBinding.class);
@@ -164,7 +168,8 @@ public class KMLConfiguration extends Configuration {
 //        container.registerComponentImplementation(KML.viewRefreshModeEnumType,ViewRefreshModeEnumTypeBinding.class);
 //        container.registerComponentImplementation(KML.ViewVolumeType,ViewVolumeTypeBinding.class);
 
-        
+        container.registerComponentImplementation(KML.name, NameBinding.class);
+
         container.registerComponentImplementation(KML.color,ColorBinding.class);
     
     }
