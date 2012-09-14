@@ -6,7 +6,15 @@ package org.geotools.kml;
  */
 public class Folder {
 
-    private String name = null;
+    private String name;
+
+    public Folder() {
+        this(null);
+    }
+
+    public Folder(String name) {
+        this.name = name;
+    }
 
     /**
      * Return the folder's name.
@@ -29,5 +37,22 @@ public class Folder {
     @Override
     public String toString() {
         return "Folder (name=" + name + ")";
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof Folder)) {
+            return false;
+        }
+        Folder that = (Folder) obj;
+        if (name == null) {
+            return that.name == null;
+        }
+        return this.name.equals(that.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return name == null ? 0 : name.hashCode();
     }
 }
