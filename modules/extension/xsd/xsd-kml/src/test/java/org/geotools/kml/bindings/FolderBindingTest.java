@@ -1,7 +1,9 @@
 package org.geotools.kml.bindings;
 
 import java.util.List;
+import java.util.Map;
 
+import org.geotools.kml.Folder;
 import org.geotools.kml.v22.KML;
 import org.geotools.kml.v22.KMLTestSupport;
 import org.geotools.xml.Binding;
@@ -34,7 +36,14 @@ public class FolderBindingTest extends KMLTestSupport {
         SimpleFeature folder2 = features.get(0);
         features = (List<SimpleFeature>) folder2.getAttribute("Feature");
         SimpleFeature placemark = features.get(0);
-        assertEquals("foo -> bar", placemark.getAttribute("Folder"));
+        Map<Object, Object> userData = placemark.getUserData();
+        Object folderObject = userData.get("Folder");
+        assertNotNull("No folder user data", folderObject);
+        assertTrue("Unknown user data", folderObject instanceof List<?>);
+        List<Folder> folders = (List<Folder>) folderObject;
+        assertEquals(2, folders.size());
+        assertEquals("foo", folders.get(0).getName());
+        assertEquals("bar", folders.get(1).getName());
         assertEquals("morx", placemark.getAttribute("name"));
     }
 

@@ -17,17 +17,18 @@
 package org.geotools.kml.bindings;
 
 import javax.xml.namespace.QName;
-import com.vividsolutions.jts.geom.Geometry;
-import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.feature.simple.SimpleFeatureType;
+
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
-import org.geotools.kml.FolderStack;
 import org.geotools.kml.KML;
 import org.geotools.xml.AbstractComplexBinding;
 import org.geotools.xml.Binding;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
+
+import com.vividsolutions.jts.geom.Geometry;
 
 
 /**
@@ -73,16 +74,7 @@ public class PlacemarkTypeBinding extends AbstractComplexBinding {
         tb.add("Geometry", Geometry.class);
         tb.setDefaultGeometry("Geometry");
 
-        // contains the folder hierarchy seriazlied as a string
-        tb.add("Folder", String.class);
-
         DefaultFeatureType = tb.buildFeatureType();
-    }
-
-    private final FolderStack folderStack;
-
-    public PlacemarkTypeBinding(FolderStack folderStack) {
-        this.folderStack = folderStack;
     }
 
     /**
@@ -98,6 +90,7 @@ public class PlacemarkTypeBinding extends AbstractComplexBinding {
      *
      * @generated modifiable
      */
+    @SuppressWarnings("rawtypes")
     public Class getType() {
         return SimpleFeature.class;
     }
@@ -121,8 +114,6 @@ public class PlacemarkTypeBinding extends AbstractComplexBinding {
 
         //&lt;element minOccurs="0" ref="kml:Geometry"/&gt;
         b.set("Geometry", node.getChildValue(Geometry.class));
-
-        b.set("Folder", folderStack.toString());
 
         return b.buildFeature(feature.getID());
     }

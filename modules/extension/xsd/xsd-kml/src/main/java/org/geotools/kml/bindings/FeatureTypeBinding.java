@@ -25,6 +25,7 @@ import javax.xml.namespace.QName;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
+import org.geotools.kml.FolderStack;
 import org.geotools.kml.KML;
 import org.geotools.kml.StyleMap;
 import org.geotools.styling.FeatureTypeStyle;
@@ -116,9 +117,11 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
     }
 
     StyleMap styleMap;
+    private final FolderStack folderStack;
     
-    public FeatureTypeBinding(StyleMap styleMap) {
+    public FeatureTypeBinding(StyleMap styleMap, FolderStack folderStack) {
         this.styleMap = styleMap;
+        this.folderStack = folderStack;
     }
 
     /**
@@ -196,7 +199,10 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
                 b.featureUserData(kv.getKey(), kv.getValue());
             }
         }
-        
+
+        // stick folder stack in feature user data
+        b.featureUserData("Folder", folderStack.asList());
+
         //&lt;element minOccurs="0" name="Metadata" type="kml:MetadataType"/&gt;
         return b.buildFeature((String) node.getAttributeValue("id"));
     }

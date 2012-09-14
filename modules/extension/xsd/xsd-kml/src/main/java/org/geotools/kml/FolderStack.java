@@ -52,4 +52,8 @@ public class FolderStack implements Iterable<Folder> {
         return sb.toString();
     }
 
+    public List<Folder> asList() {
+        return new ArrayList<Folder>(stack);
+    }
+
 }
