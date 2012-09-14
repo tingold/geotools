@@ -16,8 +16,6 @@ public class FolderBinding extends AbstractComplexBinding {
 
     private final FolderStack folderStack;
 
-    private final static String name = KML.name.getLocalPart();
-
     public FolderBinding(FolderStack folderStack) {
         this.folderStack = folderStack;
     }
@@ -39,13 +37,9 @@ public class FolderBinding extends AbstractComplexBinding {
     }
 
     @Override
-    public void initializeChildContext(ElementInstance childInstance, Node node,
-            MutablePicoContainer context) {
-        super.initializeChildContext(childInstance, node, context);
-        String childName = childInstance.getName();
-        if (childName.equals(name)) {
-            folderStack.push(new Folder());
-        }
+    public void initialize(ElementInstance instance, Node node, MutablePicoContainer context) {
+        super.initialize(instance, node, context);
+        folderStack.push(new Folder());
     }
 
     @Override
