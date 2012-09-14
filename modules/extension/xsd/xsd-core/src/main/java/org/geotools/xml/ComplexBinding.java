@@ -61,8 +61,7 @@ public interface ComplexBinding extends Binding {
      *
      */
 
-    //    void initialize(ElementInstance instance, Node node,
-    //        MutablePicoContainer context);
+    void initialize(ElementInstance instance, Node node, MutablePicoContainer context);
 
     /**
      * Initializes the context for a child element.

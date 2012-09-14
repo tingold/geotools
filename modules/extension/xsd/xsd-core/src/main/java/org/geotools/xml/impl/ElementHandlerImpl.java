@@ -189,6 +189,10 @@ public class ElementHandlerImpl extends HandlerImpl implements ElementHandler {
             node.addAttribute(new NodeImpl(attribute, parsed));
         }
 
+        // trigger the new element visitor
+        ElementInitializer initer = new ElementInitializer(element, node, parent.getContext());
+        parser.getBindingWalker().walk(element.getElementDeclaration(), initer, parent.getContext());
+
         //create context for children 
         //TODO: this should only be done if the element is complex, this class
         // needs to be split into two, one for complex, other for simple
