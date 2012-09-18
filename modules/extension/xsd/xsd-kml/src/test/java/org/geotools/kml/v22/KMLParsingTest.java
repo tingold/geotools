@@ -90,9 +90,11 @@ public class KMLParsingTest extends KMLTestSupport {
         buildDocument(xml);
 
         SimpleFeature f = (SimpleFeature) parse();
-        Map extData = f.getUserData();
-        assertNotNull(extData);
+        Map<Object, Object> userData = f.getUserData();
+        assertNotNull(userData);
 
+        @SuppressWarnings("unchecked")
+        Map<String, String> extData = (Map<String, String>) userData.get("ExtendedData");
         assertEquals("1", extData.get("holeNumber"));
         assertEquals("234", extData.get("holeYardage"));
         assertEquals("4", extData.get("holePar"));

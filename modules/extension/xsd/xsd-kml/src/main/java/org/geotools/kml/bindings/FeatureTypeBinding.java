@@ -18,6 +18,7 @@ package org.geotools.kml.bindings;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import javax.xml.namespace.QName;
@@ -193,11 +194,10 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         b.set("Region", node.getChildValue("Region"));
 
         //stick extended data in feature user data
-        Map extData = (Map) node.getChildValue("ExtendedData");
+        @SuppressWarnings("unchecked")
+        Map<String, String> extData = (Map<String, String>) node.getChildValue("ExtendedData");
         if (extData != null) {
-            for (Map.Entry kv : (Set<Map.Entry>)extData.entrySet()) {
-                b.featureUserData(kv.getKey(), kv.getValue());
-            }
+            b.featureUserData("ExtendedData", extData);
         }
 
         // stick folder stack in feature user data
