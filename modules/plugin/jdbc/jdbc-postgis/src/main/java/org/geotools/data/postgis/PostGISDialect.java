@@ -61,6 +61,7 @@ import com.vividsolutions.jts.io.WKTReader;
 import org.geotools.factory.Hints;
 import org.geotools.util.Converter;
 import org.geotools.util.ConverterFactory;
+import org.geotools.util.Converters;
 
 /**
  * 
@@ -861,6 +862,9 @@ public class PostGISDialect extends BasicSQLDialect {
             }
             super.encodeValue(sb.toString(), String.class, sql);
         } else if (type == PostGISDialect.XDate.class) {
+            if (! java.util.Date.class.isInstance(value) ) {
+                value = Converters.convert(value, java.util.Date.class);
+            }
             sql.append( ((java.util.Date) value).getTime() );
         } else {
             super.encodeValue(value, type, sql);
