@@ -195,9 +195,10 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
 
         //stick extended data in feature user data
         @SuppressWarnings("unchecked")
-        Map<String, String> extData = (Map<String, String>) node.getChildValue("ExtendedData");
+        Map<String, Map<String, Object>> extData = (Map<String, Map<String, Object>>) node.getChildValue("ExtendedData");
         if (extData != null) {
-            b.featureUserData("ExtendedData", extData);
+            b.featureUserData("UntypedExtendedData", extData.get("untyped"));
+            b.featureUserData("TypedExtendedData", extData.get("typed"));
         }
 
         // stick folder stack in feature user data

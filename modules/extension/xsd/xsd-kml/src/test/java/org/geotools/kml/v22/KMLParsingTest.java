@@ -68,7 +68,7 @@ public class KMLParsingTest extends KMLTestSupport {
     }
 
     
-    public void testParsemarkExtendedData() throws Exception {
+    public void testParseExtendedData() throws Exception {
         String xml = 
             " <Placemark> " + 
             "    <name>Club house</name> " + 
@@ -94,10 +94,10 @@ public class KMLParsingTest extends KMLTestSupport {
         assertNotNull(userData);
 
         @SuppressWarnings("unchecked")
-        Map<String, String> extData = (Map<String, String>) userData.get("ExtendedData");
-        assertEquals("1", extData.get("holeNumber"));
-        assertEquals("234", extData.get("holeYardage"));
-        assertEquals("4", extData.get("holePar"));
+        Map<String, Object> untypedData = (Map<String, Object>) userData.get("UntypedExtendedData");
+        assertEquals("1", untypedData.get("holeNumber"));
+        assertEquals("234", untypedData.get("holeYardage"));
+        assertEquals("4", untypedData.get("holePar"));
     }
 
     SimpleFeature parseSamples() throws Exception {

@@ -46,6 +46,7 @@ public class ExtendedDataTypeBinding extends AbstractComplexBinding {
      * 
      * @generated modifiable
      */
+    @SuppressWarnings("rawtypes")
     public Class getType() {
         return Map.class;
     }
@@ -55,13 +56,29 @@ public class ExtendedDataTypeBinding extends AbstractComplexBinding {
      * 
      * @generated modifiable
      */
+    @SuppressWarnings("unchecked")
     public Object parse(ElementInstance instance, Node node, Object value) throws Exception {
 
-        LinkedHashMap extData = new LinkedHashMap();
+        Map<String, Map<String, Object>> extendedData = new HashMap<String, Map<String, Object>>();
+
+        Map<String, Object> unTypedData = new LinkedHashMap<String, Object>();
         for (Node n : (List<Node>)node.getChildren("Data")) {
-            extData.put(n.getAttributeValue("name"), n.getChildValue("value"));
+            unTypedData.put((String) n.getAttributeValue("name"), n.getChildValue("value"));
         }
-        return extData;
+
+        Map<String, Object> typedData = new HashMap<String, Object>();
+        for (Node schemaData : (List<Node>)node.getChildren("SchemaData")) {
+            Object schemaUrl = schemaData.getAttributeValue("schemaUrl");
+            if (schemaUrl != null) {
+                for (Node n : (List<Node>)schemaData.getChildren("SimpleData")) {
+                    typedData.put((String) n.getAttributeValue("name"), n.getValue());
+                }
+            }
+        }
+
+        extendedData.put("untyped", unTypedData);
+        extendedData.put("typed", typedData);
+        return extendedData;
     }
 
 }
