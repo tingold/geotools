@@ -32,6 +32,7 @@ import org.geotools.kml.bindings.RegionTypeBinding;
 import org.geotools.kml.bindings.StyleTypeBinding;
 import org.geotools.kml.v22.bindings.ExtendedDataTypeBinding;
 import org.geotools.kml.v22.bindings.SchemaDataTypeBinding;
+import org.geotools.kml.v22.bindings.SchemaTypeBinding;
 import org.geotools.styling.StyleBuilder;
 import org.geotools.styling.StyleFactory;
 import org.geotools.xml.Configuration;
@@ -69,6 +70,7 @@ public class KMLConfiguration extends Configuration {
         container.registerComponentInstance(CoordinateArraySequenceFactory.instance());
         container.registerComponentInstance(new StyleMap());
         container.registerComponentInstance(new FolderStack());
+        container.registerComponentInstance(new SchemaList());
     }
 
     /**
@@ -151,7 +153,7 @@ public class KMLConfiguration extends Configuration {
 //        container.registerComponentImplementation(KML.ResourceMapType,ResourceMapTypeBinding.class);
 //        container.registerComponentImplementation(KML.ScaleType,ScaleTypeBinding.class);
         container.registerComponentImplementation(KML.SchemaDataType,SchemaDataTypeBinding.class);
-//        container.registerComponentImplementation(KML.SchemaType,SchemaTypeBinding.class);
+        container.registerComponentImplementation(KML.SchemaType,SchemaTypeBinding.class);
 //        container.registerComponentImplementation(KML.ScreenOverlayType,ScreenOverlayTypeBinding.class);
 //        container.registerComponentImplementation(KML.shapeEnumType,ShapeEnumTypeBinding.class);
 //        container.registerComponentImplementation(KML.SimpleDataType,SimpleDataTypeBinding.class);

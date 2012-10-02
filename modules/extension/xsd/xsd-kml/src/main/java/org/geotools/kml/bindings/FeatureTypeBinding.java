@@ -29,6 +29,7 @@ import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.kml.FolderStack;
 import org.geotools.kml.KML;
 import org.geotools.kml.StyleMap;
+import org.geotools.kml.v22.SchemaList;
 import org.geotools.styling.FeatureTypeStyle;
 import org.geotools.xml.AbstractComplexBinding;
 import org.geotools.xml.ElementInstance;
@@ -84,6 +85,10 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
      */
     protected static final SimpleFeatureType FeatureType;
 
+    StyleMap styleMap;
+    private final FolderStack folderStack;
+    private SchemaList schemas;
+
     static {
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
         tb.setNamespaceURI(KML.NAMESPACE);
@@ -117,12 +122,10 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         FeatureType = tb.buildFeatureType();
     }
 
-    StyleMap styleMap;
-    private final FolderStack folderStack;
-    
-    public FeatureTypeBinding(StyleMap styleMap, FolderStack folderStack) {
+    public FeatureTypeBinding(StyleMap styleMap, FolderStack folderStack, SchemaList schemas) {
         this.styleMap = styleMap;
         this.folderStack = folderStack;
+        this.schemas = schemas;
     }
 
     /**

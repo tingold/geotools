@@ -1,20 +1,22 @@
 package org.geotools.kml.v22.bindings;
 
 import java.util.List;
+import java.util.Map;
+
+import javax.xml.namespace.QName;
 
 import org.geotools.feature.NameImpl;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.geometry.jts.Geometries;
-
-import org.geotools.kml.bindings.FeatureTypeBinding;
 import org.geotools.kml.v22.KML;
-import org.geotools.xml.*;
+import org.geotools.kml.v22.SchemaList;
+import org.geotools.xml.AbstractComplexBinding;
+import org.geotools.xml.ElementInstance;
+import org.geotools.xml.Node;
 import org.geotools.xs.XS;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeType;
 import org.opengis.feature.type.Schema;
-
-import javax.xml.namespace.QName;
 
 /**
  * Binding object for the type http://www.opengis.net/kml/2.2:SchemaType.
@@ -40,6 +42,12 @@ import javax.xml.namespace.QName;
  * @generated
  */
 public class SchemaTypeBinding extends AbstractComplexBinding {
+
+    private SchemaList schemas;
+
+    public SchemaTypeBinding(SchemaList schemas) {
+        this.schemas = schemas;
+    }
 
     /**
      * @generated
@@ -80,9 +88,12 @@ public class SchemaTypeBinding extends AbstractComplexBinding {
         for (Node n : (List<Node>) node.getChildren("SimpleField")) {
             String name = (String) n.getAttributeValue("name");
             String typeName = (String) n.getAttributeValue("type");
-            tb.add(name, mapTypeName(typeName));
+            if (name != null && typeName != null) {
+                tb.add(name, mapTypeName(typeName));
+            }
         }
         SimpleFeatureType featureType = tb.buildFeatureType();
+        schemas.add(featureTypeName, featureType);
         return featureType;
     }
 
