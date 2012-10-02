@@ -3,6 +3,9 @@ package org.geotools.xml;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 
 import javax.xml.namespace.QName;
 
@@ -34,6 +37,10 @@ public class PullParser {
 
     public PullParser(Configuration config, InputStream input, Class type) {
         this(config, input, new TypePullParserHandler(type, config));
+    }
+
+    public PullParser(Configuration config, InputStream input, Object... handlerSpecs) {
+        this(config, input, new OrPullParserHandler(config, handlerSpecs));
     }
 
     public PullParser(Configuration config, InputStream input, PullParserHandler handler) {
@@ -262,6 +269,39 @@ public class PullParser {
                 equal = handler.getComponent().getNamespace() == null;
             }
             return equal && element.getLocalPart().equals(handler.getComponent().getName());
+        }
+    }
+
+    // aggregate the other handlers, and stop if any of them want to stop
+    static class OrPullParserHandler extends PullParserHandler {
+        private final Collection<PullParserHandler> parserHandlers;
+
+        public OrPullParserHandler(Configuration config, Object... handlerSpecs) {
+            super(config);
+            Collection<PullParserHandler> handlers = new ArrayList<PullParserHandler>(handlerSpecs.length);
+            for (Object spec : handlerSpecs) {
+                if (spec instanceof Class) {
+                    handlers.add(new TypePullParserHandler((Class<?>) spec, config));
+                } else if (spec instanceof QName) {
+                    handlers.add(new ElementPullParserHandler((QName) spec, config));
+                } else if (spec instanceof PullParserHandler) {
+                    handlers.add((PullParserHandler) spec);
+                } else {
+                    throw new IllegalArgumentException("Unknown element: "
+                            + spec.toString() + " of type: " + spec.getClass());
+                }
+            }
+            parserHandlers = Collections.unmodifiableCollection(handlers);
+        }
+
+        @Override
+        protected boolean stop(ElementHandler handler) {
+            for (PullParserHandler pph : parserHandlers) {
+                if (pph.stop(handler)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

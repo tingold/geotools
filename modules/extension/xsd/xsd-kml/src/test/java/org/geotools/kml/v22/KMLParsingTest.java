@@ -67,7 +67,16 @@ public class KMLParsingTest extends KMLTestSupport {
         assertEquals(20, count);
     }
 
-    
+    public void testPullParseOrHandler() throws Exception {
+        PullParser p = new PullParser(createConfiguration(), getClass().getResourceAsStream(
+                "KML_Samples.kml"), KML.Placemark, KML.GroundOverlay, KML.ScreenOverlay);
+        int count = 0;
+        while (p.parse() != null) {
+            count++;
+        }
+        assertEquals(28, count);
+    }
+
     public void testParseExtendedData() throws Exception {
         String xml = 
             " <Placemark> " + 
