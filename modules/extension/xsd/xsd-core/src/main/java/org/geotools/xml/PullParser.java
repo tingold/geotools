@@ -272,6 +272,17 @@ public class PullParser {
         }
     }
 
+    static class ElementIgnoringNamespacePullParserHandler extends ElementPullParserHandler {
+        public ElementIgnoringNamespacePullParserHandler(QName element, Configuration config) {
+            super(element, config);
+        }
+        @Override
+        protected boolean stop(ElementHandler handler) {
+            return element.getLocalPart().equals(handler.getComponent().getName());
+        }
+
+    }
+
     // aggregate the other handlers, and stop if any of them want to stop
     static class OrPullParserHandler extends PullParserHandler {
         private final Collection<PullParserHandler> parserHandlers;
@@ -283,7 +294,8 @@ public class PullParser {
                 if (spec instanceof Class) {
                     handlers.add(new TypePullParserHandler((Class<?>) spec, config));
                 } else if (spec instanceof QName) {
-                    handlers.add(new ElementPullParserHandler((QName) spec, config));
+                    // TODO ignoring the namespace
+                    handlers.add(new ElementIgnoringNamespacePullParserHandler((QName) spec, config));
                 } else if (spec instanceof PullParserHandler) {
                     handlers.add((PullParserHandler) spec);
                 } else {

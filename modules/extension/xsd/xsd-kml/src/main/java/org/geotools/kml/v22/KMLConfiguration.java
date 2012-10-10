@@ -70,7 +70,11 @@ public class KMLConfiguration extends Configuration {
         container.registerComponentInstance(CoordinateArraySequenceFactory.instance());
         container.registerComponentInstance(new StyleMap());
         container.registerComponentInstance(new FolderStack());
-        container.registerComponentInstance(new SchemaList());
+        SchemaRegistry schemaRegistry = new SchemaRegistry();
+        KMLCustomSchemaHandlerFactory handlerFactory = new KMLCustomSchemaHandlerFactory(
+                schemaRegistry);
+        container.registerComponentInstance(schemaRegistry);
+        container.registerComponentInstance(handlerFactory);
     }
 
     /**

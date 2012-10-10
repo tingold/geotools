@@ -5,11 +5,11 @@ import java.util.Map;
 
 import org.opengis.feature.simple.SimpleFeatureType;
 
-public class SchemaList {
+public class SchemaRegistry {
 
     private Map<String, SimpleFeatureType> featureTypes;
 
-    public SchemaList() {
+    public SchemaRegistry() {
         this.featureTypes = new HashMap<String, SimpleFeatureType>();
     }
 

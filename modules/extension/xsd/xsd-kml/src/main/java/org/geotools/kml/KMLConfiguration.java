@@ -48,7 +48,7 @@ import org.geotools.kml.bindings.PolyStyleTypeBinding;
 import org.geotools.kml.bindings.PolygonTypeBinding;
 import org.geotools.kml.bindings.RegionTypeBinding;
 import org.geotools.kml.bindings.StyleTypeBinding;
-import org.geotools.kml.v22.SchemaList;
+import org.geotools.kml.v22.SchemaRegistry;
 import org.geotools.styling.StyleBuilder;
 import org.geotools.styling.StyleFactory;
 import org.geotools.xml.Configuration;
@@ -88,7 +88,7 @@ public class KMLConfiguration extends Configuration {
         container.registerComponentInstance(CoordinateArraySequenceFactory.instance());
         container.registerComponentInstance(new StyleMap());
         container.registerComponentInstance(new FolderStack());
-        container.registerComponentInstance(new SchemaList());
+        container.registerComponentInstance(new SchemaRegistry());
     }
 
     /**

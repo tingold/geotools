@@ -1,7 +1,6 @@
 package org.geotools.kml.v22.bindings;
 
 import java.util.List;
-import java.util.Map;
 
 import javax.xml.namespace.QName;
 
@@ -9,7 +8,7 @@ import org.geotools.feature.NameImpl;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.geometry.jts.Geometries;
 import org.geotools.kml.v22.KML;
-import org.geotools.kml.v22.SchemaList;
+import org.geotools.kml.v22.SchemaRegistry;
 import org.geotools.xml.AbstractComplexBinding;
 import org.geotools.xml.ElementInstance;
 import org.geotools.xml.Node;
@@ -43,10 +42,10 @@ import org.opengis.feature.type.Schema;
  */
 public class SchemaTypeBinding extends AbstractComplexBinding {
 
-    private SchemaList schemas;
+    private SchemaRegistry schemaRegistry;
 
-    public SchemaTypeBinding(SchemaList schemas) {
-        this.schemas = schemas;
+    public SchemaTypeBinding(SchemaRegistry schemaRegistry) {
+        this.schemaRegistry = schemaRegistry;
     }
 
     /**
@@ -93,7 +92,7 @@ public class SchemaTypeBinding extends AbstractComplexBinding {
             }
         }
         SimpleFeatureType featureType = tb.buildFeatureType();
-        schemas.add(featureTypeName, featureType);
+        schemaRegistry.add(featureTypeName, featureType);
         return featureType;
     }
 
