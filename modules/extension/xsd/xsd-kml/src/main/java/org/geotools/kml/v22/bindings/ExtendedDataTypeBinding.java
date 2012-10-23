@@ -5,10 +5,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.geotools.kml.v22.KML;
-import org.geotools.xml.*;
-
 import javax.xml.namespace.QName;
+
+import org.geotools.kml.v22.KML;
+import org.geotools.xml.AbstractComplexBinding;
+import org.geotools.xml.ElementInstance;
+import org.geotools.xml.Node;
 
 /**
  * Binding object for the type http://www.opengis.net/kml/2.2:ExtendedDataType.
@@ -59,20 +61,21 @@ public class ExtendedDataTypeBinding extends AbstractComplexBinding {
     @SuppressWarnings("unchecked")
     public Object parse(ElementInstance instance, Node node, Object value) throws Exception {
 
-        Map<String, Map<String, Object>> extendedData = new HashMap<String, Map<String, Object>>();
+        Map<String, Object> extendedData = new HashMap<String, Object>();
 
         Map<String, Object> unTypedData = new LinkedHashMap<String, Object>();
         for (Node n : (List<Node>)node.getChildren("Data")) {
             unTypedData.put((String) n.getAttributeValue("name"), n.getChildValue("value"));
         }
 
-        Map<String, Object> typedData = new HashMap<String, Object>();
+        Map<String, Object> typedData = new LinkedHashMap<String, Object>();
         for (Node schemaData : (List<Node>)node.getChildren("SchemaData")) {
             Object schemaUrl = schemaData.getAttributeValue("schemaUrl");
             if (schemaUrl != null) {
                 for (Node n : (List<Node>)schemaData.getChildren("SimpleData")) {
                     typedData.put((String) n.getAttributeValue("name"), n.getValue());
                 }
+                extendedData.put("schema", schemaUrl);
             }
         }
 

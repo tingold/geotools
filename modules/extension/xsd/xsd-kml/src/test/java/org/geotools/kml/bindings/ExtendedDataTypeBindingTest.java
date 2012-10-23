@@ -1,5 +1,6 @@
 package org.geotools.kml.bindings;
 
+import java.net.URI;
 import java.util.Map;
 
 import org.geotools.kml.v22.KML;
@@ -18,14 +19,14 @@ public class ExtendedDataTypeBindingTest extends KMLTestSupport {
 
     // to avoid warnings
     @SuppressWarnings("unchecked")
-    private Map<String, Map<String, Object>> parseExtendedData() throws Exception {
-        return (Map<String, Map<String, Object>>) parse();
+    private Map<String, Object> parseExtendedData() throws Exception {
+        return (Map<String, Object>) parse();
     }
 
     public void testParseEmpty() throws Exception {
         String xml = "<ExtendedData></ExtendedData>";
         buildDocument(xml);
-        Map<String, Map<String, Object>> document = parseExtendedData();
+        Map<String, Object> document = parseExtendedData();
         assertEquals(2, document.size());
     }
 
@@ -33,8 +34,8 @@ public class ExtendedDataTypeBindingTest extends KMLTestSupport {
         String xml = "<ExtendedData>" + "<Data name=\"foo\"><value>bar</value></Data>"
                 + "</ExtendedData>";
         buildDocument(xml);
-        Map<String, Map<String, Object>> document = parseExtendedData();
-        Map<String, Object> untyped = document.get("untyped");
+        Map<String, Object> document = parseExtendedData();
+        Map<String, Object> untyped = (Map<String, Object>) document.get("untyped");
         assertEquals("bar", untyped.get("foo"));
     }
 
@@ -43,9 +44,11 @@ public class ExtendedDataTypeBindingTest extends KMLTestSupport {
                 + "<SimpleData name=\"quux\">morx</SimpleData>" + "</SchemaData>"
                 + "</ExtendedData>";
         buildDocument(xml);
-        Map<String, Map<String, Object>> document = parseExtendedData();
-        Map<String, Object> typed = document.get("typed");
+        Map<String, Object> document = parseExtendedData();
+        Map<String, Object> typed = (Map<String, Object>) document.get("typed");
         assertEquals("morx", typed.get("quux"));
+        URI schemaURL = (URI) document.get("schema");
+        assertEquals("foo", schemaURL.getFragment());
     }
 
 }

@@ -17,11 +17,8 @@
 package org.geotools.kml.bindings;
 
 import java.net.URI;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import javax.xml.namespace.QName;
 
@@ -39,7 +36,6 @@ import org.geotools.xml.Node;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
-import org.opengis.feature.type.Name;
 
 import com.vividsolutions.jts.geom.LinearRing;
 import com.vividsolutions.jts.geom.Point;
@@ -158,7 +154,30 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
      */
     public Object parse(ElementInstance instance, Node node, Object value)
         throws Exception {
-        SimpleFeatureBuilder b = new SimpleFeatureBuilder(FeatureType);
+
+        SimpleFeatureType featureType = null;
+
+        // retype based on schema if we have extended data pointing to a url
+        @SuppressWarnings("unchecked")
+        Map<String, Object> extData = (Map<String, Object>) node.getChildValue("ExtendedData");
+        if (extData != null) {
+            URI schemaURI = (URI) extData.get("schema");
+            if (schemaURI != null) {
+                String normalizedSchemaName = normalizeSchemaName(schemaURI);
+                SimpleFeatureType schemaType = schemaRegistry.get(normalizedSchemaName);
+                if (schemaType != null) {
+                    SimpleFeatureTypeBuilder ftb = new SimpleFeatureTypeBuilder();
+                    ftb.init(FeatureType);
+                    ftb.addAll(schemaType.getAttributeDescriptors());
+                    featureType = ftb.buildFeatureType();
+                }
+            }
+        }
+        if (featureType == null) {
+            featureType = FeatureType;
+        }
+
+        SimpleFeatureBuilder b = new SimpleFeatureBuilder(featureType);
 
         //&lt;element minOccurs="0" name="name" type="string"/&gt;
         b.set("name", node.getChildValue("name"));
@@ -202,33 +221,30 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         b.set("Region", node.getChildValue("Region"));
 
         // stick extended data in feature user data
-        @SuppressWarnings("unchecked")
-        Map<String, Map<String, Object>> extData = (Map<String, Map<String, Object>>) node
-                .getChildValue("ExtendedData");
-        Map<String, Object> typedUserData = null;
         if (extData != null) {
-            typedUserData = extData.get("typed");
             b.featureUserData("UntypedExtendedData", extData.get("untyped"));
+            Map<String, Object> typedUserData = (Map<String, Object>) extData.get("typed");
+            if (typedUserData != null) {
+                for (Entry<String, Object> entry : typedUserData.entrySet()) {
+                    String attrName = entry.getKey();
+                    if (featureType.getDescriptor(attrName) != null) {
+                        b.set(attrName, entry.getValue());
+                    }
+                }
+            }
         }
 
         // if we are a custom schema type
         // add in any attributes from that type onto the feature
         SimpleFeatureType customFeatureType = schemaRegistry.get(instance.getName());
         if (customFeatureType != null) {
-            if (typedUserData == null) {
-                typedUserData = new HashMap<String, Object>();
-            }
             for (AttributeDescriptor ad : customFeatureType.getAttributeDescriptors()) {
                 String attrName = ad.getLocalName();
                 Object childValue = node.getChildValue(attrName);
                 if (childValue != null) {
-                    typedUserData.put(attrName, childValue);
+                    b.set(attrName, childValue);
                 }
             }
-        }
-
-        if (typedUserData != null) {
-            b.featureUserData("TypedExtendedData", typedUserData);
         }
 
         // stick folder stack in feature user data
@@ -238,6 +254,13 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         return b.buildFeature((String) node.getAttributeValue("id"));
     }
     
+    private String normalizeSchemaName(URI schemaURI) {
+        if (schemaURI.getFragment() != null) {
+            return schemaURI.getFragment();
+        }
+        return schemaURI.getPath();
+    }
+
     public Object getProperty(Object object, QName name) throws Exception {
     	if( object instanceof FeatureCollection){
     		FeatureCollection features = (FeatureCollection) object;

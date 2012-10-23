@@ -58,24 +58,6 @@ import com.vividsolutions.jts.geom.Geometry;
  * @source $URL$
  */
 public class PlacemarkTypeBinding extends AbstractComplexBinding {
-    /**
-     * default feature type if no schema specified
-     */
-    static final SimpleFeatureType DefaultFeatureType;
-
-    static {
-        SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
-
-        //TODO: use inheiretance when our feature model works
-        tb.init(FeatureTypeBinding.FeatureType);
-        tb.setName("placemark");
-
-        //&lt;element minOccurs="0" ref="kml:Geometry"/&gt;
-        tb.add("Geometry", Geometry.class);
-        tb.setDefaultGeometry("Geometry");
-
-        DefaultFeatureType = tb.buildFeatureType();
-    }
 
     /**
      * @generated
@@ -107,9 +89,19 @@ public class PlacemarkTypeBinding extends AbstractComplexBinding {
      */
     public Object parse(ElementInstance instance, Node node, Object value)
         throws Exception {
-        SimpleFeatureBuilder b = new SimpleFeatureBuilder(DefaultFeatureType);
-
+        // retype from the abstract feature type, since extended data could have altered the schema
+        // placemarks add an additional geometry field
         SimpleFeature feature = (SimpleFeature) value;
+        SimpleFeatureType abstractFeatureType = feature.getFeatureType();
+        SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
+        tb.init(abstractFeatureType);
+        tb.setName("placemark");
+        tb.add("Geometry", Geometry.class);
+        tb.setDefaultGeometry("Geometry");
+        SimpleFeatureType placemarkFeatureType = tb.buildFeatureType();
+
+        SimpleFeatureBuilder b = new SimpleFeatureBuilder(placemarkFeatureType);
+
         b.init(feature);
 
         //&lt;element minOccurs="0" ref="kml:Geometry"/&gt;
