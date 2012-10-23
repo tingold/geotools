@@ -17,6 +17,7 @@
 package org.geotools.kml.bindings;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -146,6 +147,21 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         return SimpleFeature.class;
     }
 
+    private SimpleFeatureType appendAttributes(SimpleFeatureType acc, SimpleFeatureType typeToAppend) {
+        if (typeToAppend == null) {
+            return acc;
+        }
+        SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
+        tb.init(acc);
+        for (AttributeDescriptor ad : typeToAppend.getAttributeDescriptors()) {
+            // only add attributes that we don't already have
+            if (acc.getDescriptor(ad.getLocalName()) == null) {
+                tb.add(ad);
+            }
+        }
+        return tb.buildFeatureType();
+    }
+
     /**
      * <!-- begin-user-doc -->
      * <!-- end-user-doc -->
@@ -155,7 +171,8 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
     public Object parse(ElementInstance instance, Node node, Object value)
         throws Exception {
 
-        SimpleFeatureType featureType = null;
+        // start off with the default feature type, and retype as necessary
+        SimpleFeatureType featureType = FeatureType;
 
         // retype based on schema if we have extended data pointing to a url
         @SuppressWarnings("unchecked")
@@ -165,17 +182,13 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
             if (schemaURI != null) {
                 String normalizedSchemaName = normalizeSchemaName(schemaURI);
                 SimpleFeatureType schemaType = schemaRegistry.get(normalizedSchemaName);
-                if (schemaType != null) {
-                    SimpleFeatureTypeBuilder ftb = new SimpleFeatureTypeBuilder();
-                    ftb.init(FeatureType);
-                    ftb.addAll(schemaType.getAttributeDescriptors());
-                    featureType = ftb.buildFeatureType();
-                }
+                featureType = appendAttributes(featureType, schemaType);
             }
         }
-        if (featureType == null) {
-            featureType = FeatureType;
-        }
+
+        // if we are a custom schema element, add the attributes to the type
+        SimpleFeatureType customFeatureType = schemaRegistry.get(instance.getName());
+        featureType = appendAttributes(featureType, customFeatureType);
 
         SimpleFeatureBuilder b = new SimpleFeatureBuilder(featureType);
 
@@ -223,6 +236,7 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         // stick extended data in feature user data
         if (extData != null) {
             b.featureUserData("UntypedExtendedData", extData.get("untyped"));
+            @SuppressWarnings("unchecked")
             Map<String, Object> typedUserData = (Map<String, Object>) extData.get("typed");
             if (typedUserData != null) {
                 for (Entry<String, Object> entry : typedUserData.entrySet()) {
@@ -236,7 +250,6 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
 
         // if we are a custom schema type
         // add in any attributes from that type onto the feature
-        SimpleFeatureType customFeatureType = schemaRegistry.get(instance.getName());
         if (customFeatureType != null) {
             for (AttributeDescriptor ad : customFeatureType.getAttributeDescriptors()) {
                 String attrName = ad.getLocalName();

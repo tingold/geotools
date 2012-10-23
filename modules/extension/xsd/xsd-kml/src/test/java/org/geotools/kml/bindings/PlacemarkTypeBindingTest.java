@@ -134,4 +134,24 @@ public class PlacemarkTypeBindingTest extends KMLTestSupport {
         Map<String, String> untypedData = (Map<String, String>) userData.get("UntypedExtendedData");
         assertEquals("bar", untypedData.get("foo"));
     }
+
+    public void testParseCustomElement() throws Exception {
+        String xml = "<Document>" + "<Schema name=\"fooelement\">"
+                + "<SimpleField type=\"int\" name=\"quux\"></SimpleField>" + "</Schema>"
+                + "<fooelement>" + "<name>name</name>" + "<description>description</description>"
+                + "<Point>" + "<coordinates>1,2</coordinates>" + "</Point>" + "<ExtendedData>"
+                + "<SchemaData schemaUrl=\"#foo\">" + "<SimpleData name=\"quux\">morx</SimpleData>"
+                + "</SchemaData>" + "<Data name=\"foo\"><value>bar</value></Data>"
+                + "</ExtendedData>" + "</fooelement></Document>";
+        buildDocument(xml);
+
+        SimpleFeature placemark = parsePlacemarkFromDocument();
+        SimpleFeatureType featureType = placemark.getFeatureType();
+        assertEquals(Integer.class, featureType.getDescriptor("quux").getType().getBinding());
+        assertEquals("morx", placemark.getAttribute("quux"));
+        Map<Object, Object> userData = placemark.getUserData();
+        @SuppressWarnings("unchecked")
+        Map<String, String> untypedData = (Map<String, String>) userData.get("UntypedExtendedData");
+        assertEquals("bar", untypedData.get("foo"));
+    }
 }
