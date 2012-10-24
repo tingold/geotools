@@ -43,13 +43,13 @@ public class PlacemarkTypeBindingTest extends KMLTestSupport {
     }
 
     private SimpleFeature parsePlacemark() throws Exception {
-        return (SimpleFeature) parse();
-    }
-
-    private SimpleFeature parsePlacemarkFromDocument() throws Exception {
-        SimpleFeature document = (SimpleFeature) parse();
+        SimpleFeature documentOrPlacemark = (SimpleFeature) parse();
+        if (documentOrPlacemark.getName().getLocalPart().equalsIgnoreCase("placemark")) {
+            return documentOrPlacemark;
+        }
         @SuppressWarnings("unchecked")
-        List<SimpleFeature> features = (List<SimpleFeature>) document.getAttribute("Feature");
+        List<SimpleFeature> features = (List<SimpleFeature>) documentOrPlacemark
+                .getAttribute("Feature");
         assert (features.size() == 1);
         return features.get(0);
     }
@@ -85,15 +85,15 @@ public class PlacemarkTypeBindingTest extends KMLTestSupport {
     }
 
     public void testParseWithTypedData() throws Exception {
-        String xml = "<Document>" + "<Schema name=\"foo\">"
+        String xml = "<kml>" + "<Schema name=\"foo\">"
                 + "<SimpleField type=\"int\" name=\"quux\"></SimpleField>" + "</Schema>"
                 + "<Placemark>" + "<name>name</name>" + "<description>description</description>"
                 + "<Point>" + "<coordinates>1,2</coordinates>" + "</Point>" + "<ExtendedData>"
                 + "<SchemaData schemaUrl=\"#foo\">" + "<SimpleData name=\"quux\">morx</SimpleData>"
-                + "</SchemaData>" + "</ExtendedData>" + "</Placemark></Document>";
+                + "</SchemaData>" + "</ExtendedData>" + "</Placemark></kml>";
         buildDocument(xml);
 
-        SimpleFeature placemark = parsePlacemarkFromDocument();
+        SimpleFeature placemark = parsePlacemark();
         SimpleFeatureType featureType = placemark.getFeatureType();
         assertEquals(Integer.class, featureType.getDescriptor("quux").getType().getBinding());
         assertEquals("morx", placemark.getAttribute("quux"));
@@ -101,31 +101,31 @@ public class PlacemarkTypeBindingTest extends KMLTestSupport {
 
     // difference between this test and typed data test is schemaURL="foo" instead of schemaURL="#foo"
     public void testParseWithTypedDataSchemaURLNotFragment() throws Exception {
-        String xml = "<Document>" + "<Schema name=\"foo\">"
+        String xml = "<kml>" + "<Schema name=\"foo\">"
                 + "<SimpleField type=\"int\" name=\"quux\"></SimpleField>" + "</Schema>"
                 + "<Placemark>" + "<name>name</name>" + "<description>description</description>"
                 + "<Point>" + "<coordinates>1,2</coordinates>" + "</Point>" + "<ExtendedData>"
                 + "<SchemaData schemaUrl=\"foo\">" + "<SimpleData name=\"quux\">morx</SimpleData>"
-                + "</SchemaData>" + "</ExtendedData>" + "</Placemark></Document>";
+                + "</SchemaData>" + "</ExtendedData>" + "</Placemark></kml>";
         buildDocument(xml);
 
-        SimpleFeature placemark = parsePlacemarkFromDocument();
+        SimpleFeature placemark = parsePlacemark();
         SimpleFeatureType featureType = placemark.getFeatureType();
         assertEquals(Integer.class, featureType.getDescriptor("quux").getType().getBinding());
         assertEquals("morx", placemark.getAttribute("quux"));
     }
 
     public void testParseTypedAndUntypedData() throws Exception {
-        String xml = "<Document>" + "<Schema name=\"foo\">"
+        String xml = "<kml>" + "<Schema name=\"foo\">"
                 + "<SimpleField type=\"int\" name=\"quux\"></SimpleField>" + "</Schema>"
                 + "<Placemark>" + "<name>name</name>" + "<description>description</description>"
                 + "<Point>" + "<coordinates>1,2</coordinates>" + "</Point>" + "<ExtendedData>"
                 + "<SchemaData schemaUrl=\"#foo\">" + "<SimpleData name=\"quux\">morx</SimpleData>"
                 + "</SchemaData>" + "<Data name=\"foo\"><value>bar</value></Data>"
-                + "</ExtendedData>" + "</Placemark></Document>";
+                + "</ExtendedData>" + "</Placemark></kml>";
         buildDocument(xml);
 
-        SimpleFeature placemark = parsePlacemarkFromDocument();
+        SimpleFeature placemark = parsePlacemark();
         SimpleFeatureType featureType = placemark.getFeatureType();
         assertEquals(Integer.class, featureType.getDescriptor("quux").getType().getBinding());
         assertEquals("morx", placemark.getAttribute("quux"));
@@ -136,16 +136,16 @@ public class PlacemarkTypeBindingTest extends KMLTestSupport {
     }
 
     public void testParseCustomElement() throws Exception {
-        String xml = "<Document>" + "<Schema name=\"fooelement\">"
+        String xml = "<kml>" + "<Schema name=\"fooelement\">"
                 + "<SimpleField type=\"int\" name=\"quux\"></SimpleField>" + "</Schema>"
                 + "<fooelement>" + "<name>name</name>" + "<description>description</description>"
                 + "<Point>" + "<coordinates>1,2</coordinates>" + "</Point>" + "<ExtendedData>"
                 + "<SchemaData schemaUrl=\"#foo\">" + "<SimpleData name=\"quux\">morx</SimpleData>"
                 + "</SchemaData>" + "<Data name=\"foo\"><value>bar</value></Data>"
-                + "</ExtendedData>" + "</fooelement></Document>";
+                + "</ExtendedData>" + "</fooelement></kml>";
         buildDocument(xml);
 
-        SimpleFeature placemark = parsePlacemarkFromDocument();
+        SimpleFeature placemark = parsePlacemark();
         SimpleFeatureType featureType = placemark.getFeatureType();
         assertEquals(Integer.class, featureType.getDescriptor("quux").getType().getBinding());
         assertEquals("morx", placemark.getAttribute("quux"));

@@ -178,11 +178,14 @@ public class FeatureTypeBinding extends AbstractComplexBinding {
         @SuppressWarnings("unchecked")
         Map<String, Object> extData = (Map<String, Object>) node.getChildValue("ExtendedData");
         if (extData != null) {
-            URI schemaURI = (URI) extData.get("schema");
+            @SuppressWarnings("unchecked")
+            List<URI> schemaURI = (List<URI>) extData.get("schemas");
             if (schemaURI != null) {
-                String normalizedSchemaName = normalizeSchemaName(schemaURI);
-                SimpleFeatureType schemaType = schemaRegistry.get(normalizedSchemaName);
-                featureType = appendAttributes(featureType, schemaType);
+                for (URI uri : schemaURI) {
+                    String normalizedSchemaName = normalizeSchemaName(uri);
+                    SimpleFeatureType schemaType = schemaRegistry.get(normalizedSchemaName);
+                    featureType = appendAttributes(featureType, schemaType);
+                }
             }
         }
 

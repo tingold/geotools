@@ -1,5 +1,7 @@
 package org.geotools.kml.v22.bindings;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -69,16 +71,18 @@ public class ExtendedDataTypeBinding extends AbstractComplexBinding {
         }
 
         Map<String, Object> typedData = new LinkedHashMap<String, Object>();
+        List<URI> schemas = new ArrayList<URI>();
         for (Node schemaData : (List<Node>)node.getChildren("SchemaData")) {
-            Object schemaUrl = schemaData.getAttributeValue("schemaUrl");
+            URI schemaUrl = (URI) schemaData.getAttributeValue("schemaUrl");
             if (schemaUrl != null) {
                 for (Node n : (List<Node>)schemaData.getChildren("SimpleData")) {
                     typedData.put((String) n.getAttributeValue("name"), n.getValue());
                 }
-                extendedData.put("schema", schemaUrl);
+                schemas.add(schemaUrl);
             }
         }
 
+        extendedData.put("schemas", schemas);
         extendedData.put("untyped", unTypedData);
         extendedData.put("typed", typedData);
         return extendedData;

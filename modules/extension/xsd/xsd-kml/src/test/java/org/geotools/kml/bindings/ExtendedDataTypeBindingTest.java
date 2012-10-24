@@ -1,6 +1,7 @@
 package org.geotools.kml.bindings;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 
 import org.geotools.kml.v22.KML;
@@ -23,11 +24,18 @@ public class ExtendedDataTypeBindingTest extends KMLTestSupport {
         return (Map<String, Object>) parse();
     }
 
+    @SuppressWarnings("unchecked")
     public void testParseEmpty() throws Exception {
         String xml = "<ExtendedData></ExtendedData>";
         buildDocument(xml);
         Map<String, Object> document = parseExtendedData();
-        assertEquals(2, document.size());
+        assertEquals(3, document.size());
+        List<URI> schemas = (List<URI>) document.get("schemas");
+        Map<String, Object> typed = (Map<String, Object>) document.get("typed");
+        Map<String, Object> untyped = (Map<String, Object>) document.get("untyped");
+        assertTrue(schemas.isEmpty());
+        assertTrue(typed.isEmpty());
+        assertTrue(untyped.isEmpty());
     }
 
     public void testParseUntyped() throws Exception {
@@ -35,10 +43,12 @@ public class ExtendedDataTypeBindingTest extends KMLTestSupport {
                 + "</ExtendedData>";
         buildDocument(xml);
         Map<String, Object> document = parseExtendedData();
+        @SuppressWarnings("unchecked")
         Map<String, Object> untyped = (Map<String, Object>) document.get("untyped");
         assertEquals("bar", untyped.get("foo"));
     }
 
+    @SuppressWarnings("unchecked")
     public void testParseTyped() throws Exception {
         String xml = "<ExtendedData>" + "<SchemaData schemaUrl=\"#foo\">"
                 + "<SimpleData name=\"quux\">morx</SimpleData>" + "</SchemaData>"
@@ -47,8 +57,26 @@ public class ExtendedDataTypeBindingTest extends KMLTestSupport {
         Map<String, Object> document = parseExtendedData();
         Map<String, Object> typed = (Map<String, Object>) document.get("typed");
         assertEquals("morx", typed.get("quux"));
-        URI schemaURL = (URI) document.get("schema");
-        assertEquals("foo", schemaURL.getFragment());
+        List<URI> schemaURLS = (List<URI>) document.get("schemas");
+        assertEquals(1, schemaURLS.size());
+        assertEquals("foo", schemaURLS.get(0).getFragment());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testParseMultipleTypes() throws Exception {
+        String xml = "<ExtendedData>" + "<SchemaData schemaUrl=\"#foo1\">"
+                + "<SimpleData name=\"quux\">morx</SimpleData>" + "</SchemaData>"
+                + "<SchemaData schemaUrl=\"#foo2\">"
+                + "<SimpleData name=\"fleem\">zul</SimpleData>" + "</SchemaData>"
+                + "</ExtendedData>";
+        buildDocument(xml);
+        Map<String, Object> document = parseExtendedData();
+        Map<String, Object> typed = (Map<String, Object>) document.get("typed");
+        assertEquals("morx", typed.get("quux"));
+        List<URI> schemaURLS = (List<URI>) document.get("schemas");
+        assertEquals(2, schemaURLS.size());
+        assertEquals("foo1", schemaURLS.get(0).getFragment());
+        assertEquals("foo2", schemaURLS.get(1).getFragment());
     }
 
 }
