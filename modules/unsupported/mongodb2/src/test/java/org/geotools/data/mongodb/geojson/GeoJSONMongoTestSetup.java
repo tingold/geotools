@@ -1,4 +1,8 @@
-package org.geotools.data.mongodb;
+package org.geotools.data.mongodb.geojson;
+
+import org.geotools.data.mongodb.GeoJSONMapper;
+import org.geotools.data.mongodb.MongoDataStore;
+import org.geotools.data.mongodb.MongoTestSetup;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.BasicDBObjectBuilder;

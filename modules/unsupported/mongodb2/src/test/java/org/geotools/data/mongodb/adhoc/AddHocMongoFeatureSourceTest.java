@@ -1,4 +1,6 @@
-package org.geotools.data.mongodb;
+package org.geotools.data.mongodb.adhoc;
+
+import org.geotools.data.mongodb.MongoFeatureSourceTest;
 
 public class AddHocMongoFeatureSourceTest extends MongoFeatureSourceTest {
 

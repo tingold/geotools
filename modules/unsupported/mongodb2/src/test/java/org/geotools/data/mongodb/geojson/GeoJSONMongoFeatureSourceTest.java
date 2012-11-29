@@ -1,4 +1,6 @@
-package org.geotools.data.mongodb;
+package org.geotools.data.mongodb.geojson;
+
+import org.geotools.data.mongodb.MongoFeatureSourceTest;
 
 public class GeoJSONMongoFeatureSourceTest extends MongoFeatureSourceTest {
 

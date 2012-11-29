@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.util.NoSuchElementException;
 
 import org.geotools.data.simple.SimpleFeatureReader;
-import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 
@@ -16,13 +15,11 @@ public class MongoFeatureReader implements SimpleFeatureReader {
     DBCursor cursor;
     MongoFeatureSource featureSource;
     CollectionMapper mapper;
-    SimpleFeatureBuilder featureBuilder;
 
     public MongoFeatureReader(DBCursor cursor, MongoFeatureSource featureSource) {
         this.cursor = cursor;
         this.featureSource = featureSource;
         mapper = featureSource.getDataStore().getMapper();
-        featureBuilder = new SimpleFeatureBuilder(featureSource.getSchema());
     }
 
     @Override
@@ -36,14 +33,10 @@ public class MongoFeatureReader implements SimpleFeatureReader {
     }
 
     @Override
-    public SimpleFeature next() throws IOException, IllegalArgumentException,
-            NoSuchElementException {
+    public SimpleFeature next() throws IOException, IllegalArgumentException, NoSuchElementException {
         DBObject obj = cursor.next();
 
-        mapper.readGeometry(obj, featureBuilder);
-        mapper.readAttributes(obj, featureBuilder);
-
-        return featureBuilder.buildFeature(obj.get("_id").toString());
+        return mapper.buildFeature(obj, featureSource.getSchema());
     }
 
     @Override

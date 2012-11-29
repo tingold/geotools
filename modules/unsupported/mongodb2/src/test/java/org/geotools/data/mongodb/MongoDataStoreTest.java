@@ -4,14 +4,12 @@ import org.geotools.data.Query;
 import org.geotools.data.Transaction;
 import org.geotools.data.simple.SimpleFeatureReader;
 import org.geotools.data.simple.SimpleFeatureSource;
-import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
-import org.opengis.filter.FilterFactory2;
-import org.opengis.filter.spatial.BBOX;
 
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.Point;
 
 public abstract class MongoDataStoreTest extends MongoTestSupport {
 
@@ -40,8 +38,9 @@ public abstract class MongoDataStoreTest extends MongoTestSupport {
             for (int i = 0; i < 3; i++) {
                 assertTrue(reader.hasNext());
                 SimpleFeature f = reader.next();
-                assertNotNull(f.getDefaultGeometry());
-            }
+
+                assertFeature(f);
+            } 
             assertFalse(reader.hasNext());
         }
         finally {

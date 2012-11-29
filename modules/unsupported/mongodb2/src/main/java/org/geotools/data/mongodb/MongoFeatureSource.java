@@ -46,9 +46,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
        typeBuilder.add("geometry", Geometry.class);
 
        CollectionMapper mapper = getDataStore().getMapper();
-       mapper.readSchema(typeBuilder, collection);
-
-       return typeBuilder.buildFeatureType();
+       return mapper.buildFeatureType(collection);
     }
 
     @Override

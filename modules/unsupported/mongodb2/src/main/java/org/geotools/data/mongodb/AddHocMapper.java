@@ -1,17 +1,21 @@
 package org.geotools.data.mongodb;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
-import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
 
 import com.mongodb.BasicDBList;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.Point;
 
 public class AddHocMapper extends CollectionMapper {
 
@@ -19,7 +23,11 @@ public class AddHocMapper extends CollectionMapper {
     GeometryFactory geometryFactory;
 
     public AddHocMapper() {
-        setGeometryPath("loc");
+        this("loc");
+    }
+
+    public AddHocMapper(String geometryPath) {
+        setGeometryPath(geometryPath);
         setGeometryFactory(new GeometryFactory());
     }
 
@@ -50,50 +58,86 @@ public class AddHocMapper extends CollectionMapper {
     }
 
     @Override
-    public void readSchema(SimpleFeatureTypeBuilder typeBuilder, DBCollection collection) {
-        typeBuilder.add("geometry", Point.class);
-        typeBuilder.add("properties", Map.class);
+    public SimpleFeatureType buildFeatureType(DBCollection collection) {
+        SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
+        tb.setName(collection.getName());
+        tb.add(getGeometryPath(), Geometry.class);
+        return tb.buildFeatureType();
     }
 
     @Override
-    public void readGeometry(DBObject object, SimpleFeatureBuilder featureBuilder) {
-        DBObject dbObj = object;
+    public SimpleFeature buildFeature(DBObject obj, SimpleFeatureType featureType) {
+        //read the geometry
+        Object o = obj;
         for (String p : geometryPath) {
-            dbObj = (DBObject) object.get(p);
-            if (dbObj == null) {
+            o = ((DBObject) o).get(p);
+            if (o == null || !(o instanceof DBObject)) {
                 break;
             }
         }
 
-        if (dbObj == null) {
+        if (o == null) {
             throw new IllegalArgumentException("Could not resolve geometry path: " + 
-                getGeometryPath() + " for object with id: " + object.get("_id"));
+                getGeometryPath() + " for object with id: " + obj.get("_id"));
         }
 
         double x, y;
-
-        if (dbObj instanceof BasicDBList) {
-            BasicDBList list = (BasicDBList) dbObj;
+        if (o instanceof BasicDBList) {
+            BasicDBList list = (BasicDBList) o;
             x = ((Number)list.get(0)).doubleValue();
             y = ((Number)list.get(1)).doubleValue();
         }
         else {
-            if (dbObj.keySet().size() != 2) {
+            DBObject dbo = (DBObject)o;
+            if (dbo.keySet().size() != 2) {
                 throw new IllegalArgumentException("Geometry object contain two keys for object with" +
-                    " id: " + object.get("_id"));
+                  " id: " + obj.get("_id"));
             }
 
-            Iterator<String> it = dbObj.keySet().iterator();
-            x = ((Number)dbObj.get(it.next())).doubleValue();
-            y = ((Number)dbObj.get(it.next())).doubleValue();
+            Iterator<String> it = dbo.keySet().iterator();
+            x = ((Number)dbo.get(it.next())).doubleValue();
+            y = ((Number)dbo.get(it.next())).doubleValue();
         }
 
-        featureBuilder.set("geometry", geometryFactory.createPoint(new Coordinate(x,y)));
+        List<Object> values = new ArrayList<Object>(obj.keySet().size());
+        Map<String,Integer> lookup = new HashMap<String, Integer>();
+
+        values.add(geometryFactory.createPoint(new Coordinate(x,y)));
+        lookup.put(getGeometryPath(), 0);
+
+        int i = 1;
+        for (String key : obj.keySet()) {
+            if (key.equals("_id")) {
+                continue;
+            }
+            if (key.equals(geometryPath[0])) {
+                //geometry, ignore
+                continue;
+            }
+            
+            values.add(obj.get(key));
+            lookup.put(key, i++);
+        }
+
+        String id = obj.get("_id").toString();
+        return new MongoFeature(values, featureType, id, lookup);
     }
 
-    @Override
-    public void readAttributes(DBObject object, SimpleFeatureBuilder featureBuilder) {
-        featureBuilder.set("properties", object);
-    }
+//
+//    @Override
+//    public void readSchema(SimpleFeatureTypeBuilder typeBuilder, DBCollection collection) {
+//        typeBuilder.add("geometry", Point.class);
+//        typeBuilder.add("properties", Map.class);
+//    }
+//
+//    @Override
+//    public void readGeometry(DBObject object, SimpleFeatureBuilder featureBuilder) {
+
+//    }
+//
+//    @Override
+//    public void readAttributes(DBObject object, SimpleFeatureBuilder featureBuilder) {
+//        featureBuilder.set("properties", object);
+//    }
 
 }
