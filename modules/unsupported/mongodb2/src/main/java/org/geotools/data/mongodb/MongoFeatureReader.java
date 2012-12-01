@@ -19,7 +19,7 @@ public class MongoFeatureReader implements SimpleFeatureReader {
     public MongoFeatureReader(DBCursor cursor, MongoFeatureSource featureSource) {
         this.cursor = cursor;
         this.featureSource = featureSource;
-        mapper = featureSource.getDataStore().getMapper();
+        mapper = featureSource.getMapper();
     }
 
     @Override

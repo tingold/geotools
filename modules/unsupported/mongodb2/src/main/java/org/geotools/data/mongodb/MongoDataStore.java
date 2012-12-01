@@ -4,12 +4,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.geotools.data.FeatureWriter;
+import org.geotools.data.Transaction;
 import org.geotools.data.store.ContentDataStore;
 import org.geotools.data.store.ContentEntry;
 import org.geotools.data.store.ContentFeatureSource;
 import org.geotools.filter.FilterCapabilities;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.Name;
 import org.opengis.filter.ExcludeFilter;
+import org.opengis.filter.Filter;
 import org.opengis.filter.Id;
 import org.opengis.filter.IncludeFilter;
 import org.opengis.filter.PropertyIsBetween;
@@ -25,18 +30,19 @@ import org.opengis.filter.temporal.Ends;
 import org.opengis.filter.temporal.TContains;
 import org.opengis.filter.temporal.TEquals;
 
+import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 
 public class MongoDataStore extends ContentDataStore {
 
     DB db;
-    CollectionMapper mapper;
     FilterCapabilities filterCapabilities;
+    CollectionMapper defaultMapper;
 
-    public MongoDataStore(DB db, CollectionMapper mapper) {
+    public MongoDataStore(DB db) {
         this.db = db;
-        this.mapper = mapper;
         filterCapabilities = createFilterCapabilties();
+        defaultMapper = new AddHocMapper();
     }
 
     FilterCapabilities createFilterCapabilties() {
@@ -68,16 +74,21 @@ public class MongoDataStore extends ContentDataStore {
         return db;
     }
 
-    public CollectionMapper getMapper() {
-        return mapper;
-    }
-
-    public void setMapper(CollectionMapper mapper) {
-        this.mapper = mapper;
-    }
-
     public FilterCapabilities getFilterCapabilities() {
         return filterCapabilities;
+    }
+
+    public CollectionMapper getDefaultMapper() {
+        return defaultMapper;
+    }
+
+    public void setDefaultMapper(CollectionMapper defaultMapper) {
+        this.defaultMapper = defaultMapper;
+    }
+
+    @Override
+    public void createSchema(SimpleFeatureType featureType) throws IOException {
+        db.createCollection(featureType.getTypeName(), new BasicDBObject());
     }
 
     @Override
@@ -95,7 +106,16 @@ public class MongoDataStore extends ContentDataStore {
     @Override
     protected ContentFeatureSource createFeatureSource(ContentEntry entry)
             throws IOException {
-        return new MongoFeatureSource(entry, null);
+
+        return new MongoFeatureStore(entry, null);
     }
 
+    @Override
+    public FeatureWriter<SimpleFeatureType, SimpleFeature> getFeatureWriter(
+            String typeName, Filter filter, Transaction tx) throws IOException {
+        if (tx != Transaction.AUTO_COMMIT) {
+            throw new IllegalArgumentException("Transactions not currently supported");
+        }
+        return super.getFeatureWriter(typeName, filter, tx);
+    }
 }

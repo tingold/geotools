@@ -33,10 +33,50 @@ public class MongoFeatureSource extends ContentFeatureSource {
     static Logger LOG = Logging.getLogger("org.geotools.data.mongodb");
 
     DBCollection collection;
+    CollectionMapper  mapper;
 
     public MongoFeatureSource(ContentEntry entry, Query query) {
         super(entry, query);
         collection = getDataStore().getDb().getCollection(entry.getTypeName());
+        initMapper();
+    }
+
+    void initMapper() {
+        CollectionMapper mapper = getDataStore().getDefaultMapper();
+
+        //snif the first object to determine what type it is
+        if (collection.count() > 0) {
+            DBObject obj = collection.findOne();
+            if (obj.containsField("geometry") && obj.containsField("properties")) {
+                mapper = new GeoJSONMapper();
+            }
+            else {
+                //add hoc, try to figure out from values if one is the geometry
+                List<String> candidates = new ArrayList();
+                for (String key : obj.keySet()) {
+                    Object val = obj.get(key);
+                    if (val instanceof List) {
+                        candidates.add(key);
+                    }
+                }
+                if (candidates.size() == 1) {
+                    mapper = new AddHocMapper(candidates.get(0));
+                }
+            }
+        }
+        setMapper(mapper);
+    }
+
+    public DBCollection getCollection() {
+        return collection;
+    }
+
+    public CollectionMapper getMapper() {
+        return mapper;
+    }
+
+    public void setMapper(CollectionMapper mapper) {
+        this.mapper = mapper;
     }
 
     @Override
@@ -45,7 +85,6 @@ public class MongoFeatureSource extends ContentFeatureSource {
        typeBuilder.setName(entry.getName());
        typeBuilder.add("geometry", Geometry.class);
 
-       CollectionMapper mapper = getDataStore().getMapper();
        return mapper.buildFeatureType(collection);
     }
 
@@ -77,7 +116,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
     protected int getCountInternal(Query query) throws IOException {
         Filter f = query.getFilter();
         if (isAll(f)) {
-            LOG.fine("count: all");
+            LOG.fine("count(all)");
             return (int) collection.count();
         }
 
@@ -88,7 +127,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
 
         DBObject q = toQuery(f);
         if (LOG.isLoggable(Level.FINE)) {
-            LOG.fine("count: " + q);
+            LOG.fine("count(" + q + ")");
         }
         return (int) collection.count(q);
     }
@@ -146,8 +185,6 @@ public class MongoFeatureSource extends ContentFeatureSource {
 
         DBCursor c = null;
         if (q.getPropertyNames() != Query.ALL_NAMES) {
-            CollectionMapper mapper = getDataStore().getMapper();
-
             BasicDBObject keys = new BasicDBObject();
             for (String p : q.getPropertyNames()) {
                 keys.put(p, 1);
@@ -155,9 +192,15 @@ public class MongoFeatureSource extends ContentFeatureSource {
             if (!keys.containsField(mapper.getGeometryPath())) {
                 keys.put(mapper.getGeometryPath(), 1);
             }
+            if (LOG.isLoggable(Level.FINE)) {
+                LOG.fine(String.format("find(query=%s, keys=%s)", query, keys));
+            }
             c = collection.find(query, keys);
         }
         else {
+            if (LOG.isLoggable(Level.FINE)) {
+                LOG.fine(String.format("find(query=%s)", query));
+            }
             c = collection.find(query);
         }
 
@@ -185,7 +228,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
             return new BasicDBObject(); 
         }
 
-        return (DBObject) f.accept(new FilterToMongo(getDataStore().getMapper()), null); 
+        return (DBObject) f.accept(new FilterToMongo(mapper), null); 
     }
 
     boolean isAll(Filter f) {

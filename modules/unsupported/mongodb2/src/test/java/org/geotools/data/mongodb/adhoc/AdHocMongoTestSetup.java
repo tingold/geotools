@@ -1,6 +1,5 @@
 package org.geotools.data.mongodb.adhoc;
 
-import org.geotools.data.mongodb.AddHocMapper;
 import org.geotools.data.mongodb.MongoDataStore;
 import org.geotools.data.mongodb.MongoTestSetup;
 
@@ -13,7 +12,6 @@ public class AdHocMongoTestSetup extends MongoTestSetup {
 
     @Override
     protected void setUpDataStore(MongoDataStore dataStore) {
-        dataStore.setMapper(new AddHocMapper("geometry"));
     }
 
     @Override

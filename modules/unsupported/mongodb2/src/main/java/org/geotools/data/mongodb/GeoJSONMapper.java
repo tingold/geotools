@@ -26,6 +26,7 @@ public class GeoJSONMapper extends CollectionMapper {
 
     GeoJSONGeometryBuilder geomBuilder = new GeoJSONGeometryBuilder();
 
+    
     @Override
     public String getGeometryPath() {
         return "geometry.coordinates";
@@ -34,6 +35,21 @@ public class GeoJSONMapper extends CollectionMapper {
     @Override
     public String getPropertyPath(String property) {
         return "properties." + property;
+    }
+
+    @Override
+    public Geometry getGeometry(DBObject obj) {
+        return geomBuilder.toGeometry((DBObject)obj.get("geometry"));
+    }
+
+    @Override
+    public DBObject toObject(Geometry g) {
+        return geomBuilder.toObject(g);
+    }
+
+    @Override
+    public void setGeometry(DBObject obj, Geometry g) {
+        obj.put("geometry", toObject(g));
     }
 
     @Override
@@ -53,7 +69,7 @@ public class GeoJSONMapper extends CollectionMapper {
         Map<String,Integer> attLookup = new HashMap<String, Integer>();
 
         //parse geometry
-        values.add(geomBuilder.build((DBObject) obj.get("geometry")));
+        values.add(getGeometry(obj));
         attLookup.put("geometry", 0);
 
         //grab all the properties

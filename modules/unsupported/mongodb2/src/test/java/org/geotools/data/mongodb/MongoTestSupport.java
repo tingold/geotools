@@ -13,7 +13,7 @@ import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.vividsolutions.jts.geom.Point;
 
-public class MongoTestSupport extends OnlineTestCase {
+public abstract class MongoTestSupport extends OnlineTestCase {
 
     protected MongoTestSetup testSetup;
     protected MongoDataStore dataStore;

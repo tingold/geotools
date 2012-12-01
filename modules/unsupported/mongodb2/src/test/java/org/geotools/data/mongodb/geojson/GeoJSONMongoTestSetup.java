@@ -13,7 +13,7 @@ public class GeoJSONMongoTestSetup extends MongoTestSetup {
 
     @Override
     protected void setUpDataStore(MongoDataStore dataStore) {
-        dataStore.setMapper(new GeoJSONMapper());
+        dataStore.setDefaultMapper(new GeoJSONMapper());
     }
 
     @Override
@@ -60,7 +60,9 @@ public class GeoJSONMongoTestSetup extends MongoTestSetup {
         .get());
 
         ft1.ensureIndex(new BasicDBObject("geometry.coordinates", "2d"));
-    
+
+        DBCollection ft2 = db.getCollection("ft2");
+        ft2.drop();
     }
 
 }

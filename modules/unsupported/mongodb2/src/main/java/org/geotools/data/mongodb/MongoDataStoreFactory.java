@@ -57,7 +57,7 @@ public class MongoDataStoreFactory extends AbstractDataStoreFactory {
 
     @Override
     public MongoDataStore createDataStore(Map<String, Serializable> params) throws IOException {
-        return new MongoDataStore(connect(params), new AddHocMapper());
+        return new MongoDataStore(connect(params));
     }
 
     @Override

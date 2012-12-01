@@ -58,6 +58,40 @@ public class AddHocMapper extends CollectionMapper {
     }
 
     @Override
+    public Geometry getGeometry(DBObject obj) {
+        double x, y;
+        if (obj instanceof BasicDBList) {
+            BasicDBList list = (BasicDBList) obj;
+            x = ((Number)list.get(0)).doubleValue();
+            y = ((Number)list.get(1)).doubleValue();
+        }
+        else {
+            DBObject dbo = (DBObject)obj;
+            if (dbo.keySet().size() != 2) {
+                throw new IllegalArgumentException("Geometry object contain two keys for object with" +
+                  " id: " + obj.get("_id"));
+            }
+
+            Iterator<String> it = dbo.keySet().iterator();
+            x = ((Number)dbo.get(it.next())).doubleValue();
+            y = ((Number)dbo.get(it.next())).doubleValue();
+        }
+        return geometryFactory.createPoint(new Coordinate(x,y));
+    }
+
+    @Override
+    public DBObject toObject(Geometry g) {
+        GeoJSONGeometryBuilder b = new GeoJSONGeometryBuilder();
+        DBObject obj = b.toObject(g);
+        return (DBObject) obj.get("coordinates");
+    }
+
+    @Override
+    public void setGeometry(DBObject obj, Geometry g) {
+        obj.put(getGeometryPath(), toObject(g));
+    }
+
+    @Override
     public SimpleFeatureType buildFeatureType(DBCollection collection) {
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
         tb.setName(collection.getName());
@@ -81,28 +115,10 @@ public class AddHocMapper extends CollectionMapper {
                 getGeometryPath() + " for object with id: " + obj.get("_id"));
         }
 
-        double x, y;
-        if (o instanceof BasicDBList) {
-            BasicDBList list = (BasicDBList) o;
-            x = ((Number)list.get(0)).doubleValue();
-            y = ((Number)list.get(1)).doubleValue();
-        }
-        else {
-            DBObject dbo = (DBObject)o;
-            if (dbo.keySet().size() != 2) {
-                throw new IllegalArgumentException("Geometry object contain two keys for object with" +
-                  " id: " + obj.get("_id"));
-            }
-
-            Iterator<String> it = dbo.keySet().iterator();
-            x = ((Number)dbo.get(it.next())).doubleValue();
-            y = ((Number)dbo.get(it.next())).doubleValue();
-        }
-
         List<Object> values = new ArrayList<Object>(obj.keySet().size());
         Map<String,Integer> lookup = new HashMap<String, Integer>();
 
-        values.add(geometryFactory.createPoint(new Coordinate(x,y)));
+        values.add(getGeometry((DBObject)o));
         lookup.put(getGeometryPath(), 0);
 
         int i = 1;
