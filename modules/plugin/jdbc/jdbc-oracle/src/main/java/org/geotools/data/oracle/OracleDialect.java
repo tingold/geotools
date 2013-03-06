@@ -521,7 +521,14 @@ public class OracleDialect extends PreparedStatementSQLDialect {
         ps.setObject(column, s);
 
         if (LOGGER.isLoggable(Level.FINE)) {
-            String sdo = SDOSqlDumper.toSDOGeom(g, srid);
+            String sdo;
+            try {
+                // the dumper cannot translate all types of geometries
+                sdo = SDOSqlDumper.toSDOGeom(g, srid);
+            } catch(Exception e) {
+                sdo = "Could not translate this geometry into a SDO string, " +
+                		"WKT representation is: " + g;
+            }
             LOGGER.fine("Setting parameter " + column + " as " + sdo);
         }
     }
@@ -707,7 +714,13 @@ public class OracleDialect extends PreparedStatementSQLDialect {
         if (!estimatedExtentsEnabled || dataStore.getVirtualTables().get(featureType.getTypeName()) != null)
             return null;
 
-        String tableName = featureType.getTypeName();
+        String tableName;
+        if(schema != null && !"".equals(schema)) {
+            tableName = schema + "." + featureType.getTypeName();
+        } else {
+            tableName = featureType.getTypeName();
+        }
+
         
         Statement st = null;
         ResultSet rs = null;
@@ -729,6 +742,7 @@ public class OracleDialect extends PreparedStatementSQLDialect {
                     sql.append("', '");
                     sql.append(att.getName().getLocalPart());
                     sql.append("') FROM DUAL");
+                    LOGGER.log(Level.FINE, "Getting the full extent of the table using optimized search: {0}", sql);
                     rs = st.executeQuery(sql.toString());
 
                     if (rs.next()) {
