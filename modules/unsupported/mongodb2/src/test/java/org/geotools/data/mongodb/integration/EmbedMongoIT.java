@@ -1,27 +1,27 @@
 package org.geotools.data.mongodb.integration;
 
+import com.mongodb.BasicDBObject;
+import com.mongodb.DB;
+import com.mongodb.DBCollection;
 import com.mongodb.MongoClient;
 import java.net.UnknownHostException;
-import org.apache.commons.lang3.StringUtils;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.assertThat;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 
 /**
  *
  * @author tkunicki@boundlessgeo.com
  */
-@Category(IntegrationTest.class)
-public class EmbedMongoTest {
+public class EmbedMongoIT {
 
   static final int PORT;
   
   static {
     String portAsString = System.getProperty("embedmongo.port");
     int port = 27017;
-    if (!StringUtils.isBlank(portAsString)) {
+    if (!(portAsString == null || portAsString.isEmpty())) {
       try {
         port = Integer.parseInt(portAsString);
       } catch (NumberFormatException e) {
@@ -29,6 +29,7 @@ public class EmbedMongoTest {
       }
     }
     PORT = port;
+    System.out.println("EmbedMongo Port is " + PORT);
   }
   
   @Test
@@ -36,6 +37,15 @@ public class EmbedMongoTest {
     MongoClient mc = new MongoClient("localhost", PORT);
     try {
       assertThat(mc, is(notNullValue()));
+      DB db = mc.getDB("db");
+      DBCollection coll = db.getCollection("dbc");
+      BasicDBObject bdo = new BasicDBObject("name", "MongoDB").
+                              append("type", "database").
+                              append("count", 1).
+                              append("info", new BasicDBObject("x", 203).append("y", 102));
+
+      coll.insert(bdo);
+      System.out.println(coll.findOne());
     } finally {
       mc.close();
     }
