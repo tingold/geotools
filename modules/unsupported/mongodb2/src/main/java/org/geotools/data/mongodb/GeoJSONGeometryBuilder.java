@@ -112,7 +112,7 @@ public class GeoJSONGeometryBuilder {
         for (int i = 0; i < mp.getNumGeometries(); i++) {
             l.add(toList(((Polygon)mp.getGeometryN(i))));
         }
-        return new BasicDBObjectBuilder().start()
+        return BasicDBObjectBuilder.start()
             .add("type", "MultiPolygon")
             .add("coordinates", l)
             .get();
@@ -132,7 +132,7 @@ public class GeoJSONGeometryBuilder {
             l.add(toList(((LineString)ml.getGeometryN(i)).getCoordinateSequence()));
         }
 
-        return new BasicDBObjectBuilder().start()
+        return BasicDBObjectBuilder.start()
             .add("type", "MultiLineString")
             .add("coordinates", l)
             .get();
@@ -147,7 +147,7 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(MultiPoint mp) {
-        return new BasicDBObjectBuilder().start()
+        return BasicDBObjectBuilder.start()
             .add("type", "MultiPoint")
             .add("coordinates", toList(mp.getCoordinates()))
             .get();
@@ -163,7 +163,7 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(Polygon p) {
-        return new BasicDBObjectBuilder().start()
+        return BasicDBObjectBuilder.start()
             .add("type", "Polygon")
             .add("coordinates", toList(p))
             .get();
@@ -183,7 +183,7 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(LineString l) {
-        return new BasicDBObjectBuilder().start()
+        return BasicDBObjectBuilder.start()
             .add("type", "LineString")
             .add("coordinates", toList(l.getCoordinateSequence()))
             .get();
@@ -194,7 +194,7 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(Point p) {
-        return new BasicDBObjectBuilder().start()
+        return BasicDBObjectBuilder.start()
             .add("type", "Point")
             .add("coordinates", toList(p.getCoordinate()))
             .get();

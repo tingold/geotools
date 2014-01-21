@@ -21,8 +21,7 @@ public class GeoJSONMongoTestSetup extends MongoTestSetup {
         DBCollection ft1 = db.getCollection("ft1");
         ft1.drop();
 
-        BasicDBObjectBuilder builder = new BasicDBObjectBuilder();
-        ft1.save(builder.start()
+        ft1.save(BasicDBObjectBuilder.start()
             .add("id", "ft1.0")
             .push("geometry")
                 .add("type", "Point")
@@ -34,7 +33,7 @@ public class GeoJSONMongoTestSetup extends MongoTestSetup {
                 .add("stringProperty", "zero")
             .pop()
         .get());
-        ft1.save(builder.start()
+        ft1.save(BasicDBObjectBuilder.start()
             .add("id", "ft1.1")
             .push("geometry")
                 .add("type", "Point")
@@ -46,7 +45,7 @@ public class GeoJSONMongoTestSetup extends MongoTestSetup {
                 .add("stringProperty", "one")
             .pop()
         .get());
-        ft1.save(builder.start()
+        ft1.save(BasicDBObjectBuilder.start()
             .add("id", "ft1.2")
             .push("geometry")
                 .add("type", "Point")
