@@ -17,7 +17,7 @@ public class MongoDataStoreFactory extends AbstractDataStoreFactory {
 
     public static final Param HOST = new Param("host", String.class, "Host", true, "localhost");
     public static final Param PORT = new Param("port", Integer.class, "Port", true, 27017);
-    public static final Param USER = new Param("user", String.class, "User", true);
+    public static final Param USER = new Param("user", String.class, "User", false);
     public static final Param PASSWD = new Param("passwd", String.class, "Password", false, null, 
         Collections.singletonMap(Parameter.IS_PASSWORD, Boolean.TRUE));
     public static final Param DATABASE = new Param("database", String.class, "Database", true);
@@ -48,7 +48,7 @@ public class MongoDataStoreFactory extends AbstractDataStoreFactory {
         Mongo m = new Mongo(new MongoURI(uri));
 
         DB db = m.getDB(dbname);
-        if (!db.authenticate(user, passwd.toCharArray())) {
+        if (user != null && passwd != null && !db.authenticate(user, passwd.toCharArray())) {
             throw new IOException(
                 String.format("Authentication of user %s failed against database %s", user, dbname));
         }
