@@ -169,61 +169,76 @@ public class MongoWriteFeature implements SimpleFeature {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Map<Object, Object> getUserData() {
         return Collections.emptyMap();
     }
 
+    @Override
     public GeometryAttribute getDefaultGeometryProperty() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public void setDefaultGeometryProperty(GeometryAttribute defaultGeometry) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Collection<Property> getProperties() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Collection<Property> getProperties(Name name) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Collection<Property> getProperties(String name) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Property getProperty(Name name) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Property getProperty(String name) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Collection<?extends Property> getValue() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public void setValue(Collection<Property> value) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public AttributeDescriptor getDescriptor() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public Name getName() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public boolean isNillable() {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public void setValue(Object value) {
         throw new UnsupportedOperationException();
     }
+    @Override
     public void validate() {
     }
 

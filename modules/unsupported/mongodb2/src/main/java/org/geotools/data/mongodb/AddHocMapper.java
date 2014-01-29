@@ -136,7 +136,8 @@ public class AddHocMapper extends CollectionMapper {
         }
 
         String id = obj.get("_id").toString();
-        return new MongoFeature(values, featureType, id, lookup);
+//        return new MongoFeature(values, featureType, id, lookup);
+        return null;
     }
 
 //

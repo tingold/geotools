@@ -1,20 +1,20 @@
 package org.geotools.data.mongodb;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
-import org.geotools.feature.simple.SimpleFeatureBuilder;
-import org.geotools.feature.simple.SimpleFeatureImpl;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
-import org.geotools.filter.identity.FeatureIdImpl;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Geometry;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import org.bson.types.BSONTimestamp;
+import org.geotools.referencing.crs.DefaultGeographicCRS;
+import org.opengis.feature.type.AttributeDescriptor;
 
 /**
  * Maps a collection containing valid GeoJSON. 
@@ -29,7 +29,7 @@ public class GeoJSONMapper extends CollectionMapper {
     
     @Override
     public String getGeometryPath() {
-        return "geometry.coordinates";
+        return "geometry";
     }
 
     @Override
@@ -54,34 +54,61 @@ public class GeoJSONMapper extends CollectionMapper {
 
     @Override
     public SimpleFeatureType buildFeatureType(DBCollection collection) {
+        
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
         tb.setName(collection.getName());
-        //tb.setSRS("EPSG:4326");
-        tb.add("geometry", Geometry.class);
+        tb.add("geometry", Geometry.class, DefaultGeographicCRS.WGS84);
+        DBObject rootDBO = collection.findOne();
+        if (rootDBO.containsField("properties")) {
+          DBObject propertiesDBO = (DBObject)rootDBO.get("properties");
+          for (String key : propertiesDBO.keySet()) {
+              Object v = propertiesDBO.get(key);
+              Class<?> c = v.getClass();
+              if (v instanceof String) {
+                tb.add(key, v.getClass());
+              } else if (v instanceof Double) {
+                tb.add(key, v.getClass());
+              } else if (v instanceof Long) {
+                tb.add(key, v.getClass());
+              } else if (v instanceof Integer) {
+                tb.add(key, v.getClass());
+              } else if (v instanceof Boolean) {
+                tb.add(key, v.getClass());
+              } else if (v instanceof Date) {
+                tb.add(key, Date.class);
+              } else if (v instanceof BSONTimestamp) {
+                tb.add(key, Date.class);
+              } else {
+                System.err.println("unmapped key, " + key + " with type of " + v.getClass().getCanonicalName());
+              }
+          }
+        }
         return tb.buildFeatureType();
     }
-
+    
     @Override
-    public SimpleFeature buildFeature(DBObject obj, SimpleFeatureType featureType) {
-        DBObject propObj = (DBObject) obj.get("properties");
+    public SimpleFeature buildFeature(DBObject rootDBO, SimpleFeatureType featureType) {
+      
+        DBObject propertiesDBO = (DBObject) rootDBO.get("properties");
 
-        List<Object> values = new ArrayList<Object>(propObj.keySet().size()+1);
-        Map<String,Integer> attLookup = new HashMap<String, Integer>();
-
-        //parse geometry
-        values.add(getGeometry(obj));
-        attLookup.put("geometry", 0);
-
-        //grab all the properties
-        int i = 1;
-        for (String key : propObj.keySet()) {
-            values.add(propObj.get(key));
-            attLookup.put(key, i++);
+        List<AttributeDescriptor> descriptors = featureType.getAttributeDescriptors();
+        List values = new ArrayList(descriptors.size());
+        
+        for (AttributeDescriptor descriptor : descriptors) {
+          String name = descriptor.getLocalName();
+          if ("geometry".equals(name)) {
+            values.add(getGeometry(rootDBO));
+          } else {
+            if (propertiesDBO != null) {
+              values.add(propertiesDBO == null ? null : propertiesDBO.get(name));
+            }
+          }
         }
-
-        //id
-        String id = (String) obj.get("_id").toString();
-        return new MongoFeature(values, featureType, id, attLookup);
+        
+        String id = (String) rootDBO.get("_id").toString();
+        
+        return new MongoFeature(values.toArray(), featureType, id);
 
     }
+   
 }

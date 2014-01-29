@@ -42,7 +42,7 @@ public class MongoDataStore extends ContentDataStore {
     public MongoDataStore(DB db) {
         this.db = db;
         filterCapabilities = createFilterCapabilties();
-        defaultMapper = new AddHocMapper();
+        defaultMapper = new GeoJSONMapper();
     }
 
     FilterCapabilities createFilterCapabilties() {
