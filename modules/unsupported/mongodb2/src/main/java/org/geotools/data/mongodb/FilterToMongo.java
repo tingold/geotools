@@ -62,6 +62,7 @@ import org.opengis.filter.temporal.TOverlaps;
 
 import com.mongodb.BasicDBList;
 import com.mongodb.BasicDBObject;
+import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
@@ -272,10 +273,22 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
         Object e1 = filter.getExpression1().accept(this, Geometry.class);
 
         Envelope env = filter.getExpression2().evaluate(null, Envelope.class);
-        Object e2 = encodeLiteral(env);
 
-        BasicDBObject dbo = new BasicDBObject();
-        dbo.put("$within", new BasicDBObject("$box", e2));
+        DBObject dbo = BasicDBObjectBuilder.start().
+            push("$geoIntersects").
+              push("$geometry").
+                add("type", "Polygon").
+                add("coordinates", new double[][][]
+                  {
+                    { 
+                      { env.getMinX(), env.getMinY() },
+                      { env.getMinX(), env.getMaxY() },
+                      { env.getMaxX(), env.getMaxY() },
+                      { env.getMaxX(), env.getMinY() },
+                      { env.getMinX(), env.getMinY() }
+                    }
+                }).get();
+                
         output.put((String)e1, dbo);
         return output;
     }
