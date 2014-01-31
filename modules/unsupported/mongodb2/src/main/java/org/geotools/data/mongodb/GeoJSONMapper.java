@@ -100,9 +100,7 @@ public class GeoJSONMapper extends CollectionMapper {
           if ("geometry".equals(name)) {
             values.add(getGeometry(rootDBO));
           } else {
-            if (propertiesDBO != null) {
-              values.add(propertiesDBO == null ? null : propertiesDBO.get(name));
-            }
+            values.add(propertiesDBO == null ? null : propertiesDBO.get(name));
           }
         }
         
