@@ -81,11 +81,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
 
     @Override
     protected SimpleFeatureType buildFeatureType() throws IOException {
-       SimpleFeatureTypeBuilder typeBuilder = new SimpleFeatureTypeBuilder();
-       typeBuilder.setName(entry.getName());
-       typeBuilder.add("geometry", Geometry.class);
-
-       return mapper.buildFeatureType(collection);
+       return mapper.buildFeatureType(entry.getName(), collection);
     }
 
     @Override

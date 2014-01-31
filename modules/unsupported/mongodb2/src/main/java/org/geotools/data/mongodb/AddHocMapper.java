@@ -16,6 +16,7 @@ import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import org.opengis.feature.type.Name;
 
 public class AddHocMapper extends CollectionMapper {
 
@@ -92,9 +93,9 @@ public class AddHocMapper extends CollectionMapper {
     }
 
     @Override
-    public SimpleFeatureType buildFeatureType(DBCollection collection) {
+    public SimpleFeatureType buildFeatureType(Name name, DBCollection collection) {
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
-        tb.setName(collection.getName());
+        tb.setName(name);
         tb.add(getGeometryPath(), Geometry.class);
         return tb.buildFeatureType();
     }

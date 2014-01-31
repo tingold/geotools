@@ -15,6 +15,7 @@ import java.util.List;
 import org.bson.types.BSONTimestamp;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.type.AttributeDescriptor;
+import org.opengis.feature.type.Name;
 
 /**
  * Maps a collection containing valid GeoJSON. 
@@ -53,10 +54,10 @@ public class GeoJSONMapper extends CollectionMapper {
     }
 
     @Override
-    public SimpleFeatureType buildFeatureType(DBCollection collection) {
+    public SimpleFeatureType buildFeatureType(Name name, DBCollection collection) {
         
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
-        tb.setName(collection.getName());
+        tb.setName(name);
         tb.add("geometry", Geometry.class, DefaultGeographicCRS.WGS84);
         DBObject rootDBO = collection.findOne();
         if (rootDBO.containsField("properties")) {

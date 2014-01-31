@@ -6,6 +6,7 @@ import org.opengis.feature.simple.SimpleFeatureType;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Geometry;
+import org.opengis.feature.type.Name;
 
 /**
  * A strategy for mapping a mongo collection to a feature.
@@ -25,7 +26,7 @@ public abstract class CollectionMapper {
 
     public abstract String getPropertyPath(String property);
 
-    public abstract SimpleFeatureType buildFeatureType(DBCollection collection);
+    public abstract SimpleFeatureType buildFeatureType(Name name, DBCollection collection);
 
     public abstract SimpleFeature buildFeature(DBObject obj, SimpleFeatureType featureType);
 }
