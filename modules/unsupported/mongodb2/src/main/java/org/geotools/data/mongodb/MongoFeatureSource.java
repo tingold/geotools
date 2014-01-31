@@ -183,7 +183,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
         if (q.getPropertyNames() != Query.ALL_NAMES) {
             BasicDBObject keys = new BasicDBObject();
             for (String p : q.getPropertyNames()) {
-                keys.put(p, 1);
+                keys.put(mapper.getPropertyPath(p), 1);
             }
             if (!keys.containsField(mapper.getGeometryPath())) {
                 keys.put(mapper.getGeometryPath(), 1);
