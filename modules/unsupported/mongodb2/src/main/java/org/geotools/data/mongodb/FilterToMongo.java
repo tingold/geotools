@@ -1,12 +1,17 @@
 package org.geotools.data.mongodb;
 
-import java.util.Iterator;
+import com.mongodb.BasicDBList;
+import com.mongodb.BasicDBObject;
+import com.mongodb.BasicDBObjectBuilder;
+import com.mongodb.DBObject;
+import com.vividsolutions.jts.geom.Envelope;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.Point;
 import java.util.List;
 import java.util.regex.Pattern;
-
+import static org.geotools.util.Converters.convert;
 import org.opengis.filter.And;
 import org.opengis.filter.BinaryComparisonOperator;
-import org.opengis.filter.BinaryLogicOperator;
 import org.opengis.filter.ExcludeFilter;
 import org.opengis.filter.Filter;
 import org.opengis.filter.FilterVisitor;
@@ -26,7 +31,6 @@ import org.opengis.filter.PropertyIsNotEqualTo;
 import org.opengis.filter.PropertyIsNull;
 import org.opengis.filter.expression.Add;
 import org.opengis.filter.expression.Divide;
-import org.opengis.filter.expression.Expression;
 import org.opengis.filter.expression.ExpressionVisitor;
 import org.opengis.filter.expression.Function;
 import org.opengis.filter.expression.Literal;
@@ -60,20 +64,10 @@ import org.opengis.filter.temporal.TContains;
 import org.opengis.filter.temporal.TEquals;
 import org.opengis.filter.temporal.TOverlaps;
 
-import com.mongodb.BasicDBList;
-import com.mongodb.BasicDBObject;
-import com.mongodb.BasicDBObjectBuilder;
-import com.mongodb.DBObject;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Envelope;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.Point;
-
-import static org.geotools.util.Converters.convert;
-
 /**
  * @author Gerald Gay, Data Tactics Corp.
  * @author Alan Mangan, Data Tactics Corp.
+ * @author Tom Kunicki, Boundless Spatial Inc.
  * @source $URL$ (C) 2011, Open Source Geospatial Foundation (OSGeo)
  * @see The GNU Lesser General Public License (LGPL)
  */
@@ -96,10 +90,12 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     //
     // primitives
     //
+    @Override
     public Object visit(Literal expression, Object extraData) {
         return encodeLiteral(expression.getValue());
     }
 
+    @Override
     public Object visit(PropertyName expression, Object extraData) {
         String prop = expression.getPropertyName();
         if (extraData == Geometry.class) {
@@ -108,6 +104,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
         return mapper.getPropertyPath(prop);
     }
 
+    @Override
     public Object visit(ExcludeFilter filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
         output.put("foo", "not_likely_to_exist");
@@ -115,6 +112,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     }
 
     // An empty object should be an "all" query
+    @Override
     public Object visit(IncludeFilter filter, Object extraData) {
         return new BasicDBObject();
     }
@@ -125,35 +123,36 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     
     // Expressions like ((A == 1) AND (B == 2)) are basically
     // implied. So just build up all sub expressions
+    @Override
     public Object visit(And filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
     
         List<Filter> children = filter.getChildren();
         if (children != null) {
-            for (Iterator<Filter> i = children.iterator(); i.hasNext();) {
-                Filter child = i.next();
-                child.accept(this, output);
-            }
+          for (Filter child : children) {
+            child.accept(this, output);
+          }
         }
     
         return output;
     }
 
+    @Override
     public Object visit(Or filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
         List<Filter> children = filter.getChildren();
         BasicDBList orList = new BasicDBList();
         if (children != null) {
-            for (Iterator<Filter> i = children.iterator(); i.hasNext();) {
-                Filter child = i.next();
-                BasicDBObject item = (BasicDBObject) child.accept(this, null);
-                orList.add(item);
-            }
+          for (Filter child : children) {
+            BasicDBObject item = (BasicDBObject) child.accept(this, null);
+            orList.add(item);
+          }
             output.put("$or", orList);
         }
         return output;
     }
 
+    @Override
     public Object visit(Not filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
         BasicDBObject expr = (BasicDBObject) filter.getFilter().accept(this, null);
@@ -164,6 +163,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     //
     // comparison
     //
+    @Override
     public Object visit(PropertyIsBetween filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
 
@@ -178,21 +178,9 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
         return propName;
     }
 
+    @Override
     public Object visit(PropertyIsEqualTo filter, Object extraData) {
-        BasicDBObject output = asDBObject(extraData);
-
-        Object expr1 = filter.getExpression1().accept(this, null);
-        Object expr2 = filter.getExpression2().accept(this, null);
-
-        if (expr2 instanceof String && !(expr1 instanceof String)) {
-            //reverse
-            Object tmp = expr1;
-            expr1 = expr2;
-            expr2 = tmp;
-        }
-
-        output.put((String)expr1, expr2);
-        return output;
+        return visitBinaryComparisonOp(filter, null, extraData);
     }
 
     BasicDBObject visitBinaryComparisonOp(BinaryComparisonOperator filter, String op, Object extraData) {
@@ -208,26 +196,31 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
             expr2 = tmp;
         }
 
-        output.put((String)expr1, new BasicDBObject(op, expr2));
+        output.put((String)expr1, op == null ? expr2 : new BasicDBObject(op, expr2));
         return output;
     }
 
+    @Override
     public Object visit(PropertyIsNotEqualTo filter, Object extraData) {
         return visitBinaryComparisonOp(filter, "$ne", extraData);
     }
     
+    @Override
     public Object visit(PropertyIsGreaterThan filter, Object extraData) {
         return visitBinaryComparisonOp(filter, "$gt", extraData);
     }
     
+    @Override
     public Object visit(PropertyIsGreaterThanOrEqualTo filter, Object extraData) {
         return visitBinaryComparisonOp(filter, "$gte", extraData);
     }
     
+    @Override
     public Object visit(PropertyIsLessThan filter, Object extraData) {
         return visitBinaryComparisonOp(filter, "$lt", extraData);
     }
     
+    @Override
     public Object visit(PropertyIsLessThanOrEqualTo filter, Object extraData) {
         return visitBinaryComparisonOp(filter, "$lte", extraData);
     }
@@ -238,6 +231,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     // filter.getWildCard() returns SQL-like '%'
     // filter.getSingleChar() returns SQL-like '_'
     // So I'm converting "foo_bar%" to /foo.bar.*/
+    @Override
     public Object visit(PropertyIsLike filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
         String expr = convert(filter.accept(this, null), String.class);
@@ -255,6 +249,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
     // There is no "NULL" in MongoDB, but I assume that TODO add null support
     // the non-existence of a column is the same...
+    @Override
     public Object visit(PropertyIsNull filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
 
@@ -266,6 +261,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     //
     // spatial
     //
+    @Override
     public Object visit(BBOX filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
 
@@ -279,15 +275,11 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
               push("$geometry").
                 add("type", "Polygon").
                 add("coordinates", new double[][][]
-                  {
-                    { 
-                      { env.getMinX(), env.getMinY() },
+                  { { { env.getMinX(), env.getMinY() },
                       { env.getMinX(), env.getMaxY() },
                       { env.getMaxX(), env.getMaxY() },
                       { env.getMaxX(), env.getMinY() },
-                      { env.getMinX(), env.getMinY() }
-                    }
-                }).get();
+                      { env.getMinX(), env.getMinY() } } }).get();
                 
         output.put((String)e1, dbo);
         return output;

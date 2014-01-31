@@ -1,19 +1,17 @@
 package org.geotools.data.mongodb;
 
 
-import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
-import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.feature.simple.SimpleFeatureType;
-
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Geometry;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import org.bson.types.BSONTimestamp;
+import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.Name;
 
@@ -27,7 +25,6 @@ public class GeoJSONMapper extends CollectionMapper {
 
     GeoJSONGeometryBuilder geomBuilder = new GeoJSONGeometryBuilder();
 
-    
     @Override
     public String getGeometryPath() {
         return "geometry";
@@ -64,7 +61,6 @@ public class GeoJSONMapper extends CollectionMapper {
           DBObject propertiesDBO = (DBObject)rootDBO.get("properties");
           for (String key : propertiesDBO.keySet()) {
               Object v = propertiesDBO.get(key);
-              Class<?> c = v.getClass();
               if (v instanceof String) {
                 tb.add(key, v.getClass());
               } else if (v instanceof Double) {
@@ -104,10 +100,7 @@ public class GeoJSONMapper extends CollectionMapper {
           }
         }
         
-        String id = (String) rootDBO.get("_id").toString();
-        
-        return new MongoFeature(values.toArray(), featureType, id);
-
+        return new MongoFeature(values.toArray(), featureType, rootDBO.get("_id").toString());
     }
    
 }

@@ -168,7 +168,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
     }
 
     DBCursor toCursor(Query q, List<Filter> postFilter) {
-        DBObject query = new BasicDBObject();;
+        DBObject query = new BasicDBObject();
 
         Filter f = q.getFilter();
         if (!isAll(f)) {
