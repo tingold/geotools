@@ -1,40 +1,44 @@
 package org.geotools.data.mongodb;
 
+import com.mongodb.BasicDBObject;
+import com.mongodb.DBObject;
+import com.vividsolutions.jts.geom.Geometry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
 import org.geotools.filter.identity.FeatureIdImpl;
 import org.opengis.feature.GeometryAttribute;
-import org.opengis.feature.IllegalAttributeException;
 import org.opengis.feature.Property;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
+import org.opengis.feature.type.GeometryDescriptor;
 import org.opengis.feature.type.Name;
 import org.opengis.filter.identity.FeatureId;
 import org.opengis.geometry.BoundingBox;
 
-import com.mongodb.BasicDBObject;
-import com.mongodb.DBObject;
-import com.vividsolutions.jts.geom.Geometry;
-
 public class MongoWriteFeature implements SimpleFeature {
 
-    DBObject dbo;
-    SimpleFeatureType featureType;
-    CollectionMapper mapper;
+    private final SimpleFeatureType featureType;
+    private final DBObject featureDBO;
+    private final CollectionMapper mapper;
+    
+    private final Map<Object, Object> userData; 
 
     public MongoWriteFeature(DBObject dbo, SimpleFeatureType featureType, CollectionMapper mapper) {
-        this.dbo = dbo;
+        this.featureDBO = dbo;
         this.featureType = featureType;
         this.mapper = mapper;
+        
+        userData = new HashMap<Object, Object>();
     }
 
     public DBObject getObject() {
-        return dbo;
+        return featureDBO;
     }
 
     @Override
@@ -55,7 +59,7 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public String getID() {
-        Object id = dbo.get("_id");
+        Object id = featureDBO.get("_id");
         return id != null ? id.toString() : null; 
     }
 
@@ -67,12 +71,14 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public Object getDefaultGeometry() {
-        return mapper.getGeometry(dbo);
+        Object o = get(mapper.getGeometryPath());
+        return o instanceof DBObject ? mapper.getGeometry((DBObject)o) : null;
     }
 
     @Override
     public void setDefaultGeometry(Object geometry) {
-        mapper.setGeometry(dbo, (Geometry)geometry);
+        geometry = convertToMongo(geometry);
+        set(mapper.getGeometryPath(), geometry);
     }
 
     @Override
@@ -82,8 +88,13 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public Object getAttribute(String name) {
-        
-        return get(name);
+        AttributeDescriptor d = featureType.getDescriptor(name);
+        if (d instanceof GeometryDescriptor) {
+            Object o = get(mapper.getGeometryPath());
+            return o instanceof DBObject ?
+                    mapper.getGeometry((DBObject)o) : null;
+        }
+        return get(mapper.getPropertyPath(name));
     }
 
     @Override
@@ -93,49 +104,76 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public void setAttribute(String name, Object value) {
-        //TODO: check for geometry
         value = convertToMongo(value);
-        set(name, value);
+        AttributeDescriptor d = featureType.getDescriptor(name);
+        if (d instanceof GeometryDescriptor) {
+            set(mapper.getGeometryPath(), value);
+        } else {
+            set(mapper.getPropertyPath(d.getLocalName()), value);
+        }
     }
 
     @Override
     public Object getAttribute(int index) throws IndexOutOfBoundsException {
-        return getAttribute(key(index)); 
+        AttributeDescriptor d = featureType.getDescriptor(index);
+        if (d instanceof GeometryDescriptor) {
+            Object o = get(mapper.getGeometryPath());
+            return o instanceof DBObject ?
+                    mapper.getGeometry((DBObject)o) : null;
+        }
+        return get(mapper.getPropertyPath(d.getLocalName()));
     }
 
     @Override
     public void setAttribute(int index, Object value) throws IndexOutOfBoundsException {
-        setAttribute(key(index), value);
+        value = convertToMongo(value);
+        AttributeDescriptor d = featureType.getDescriptor(index);
+        if (d instanceof GeometryDescriptor) {
+            set(mapper.getGeometryPath(), value);
+        } else {
+            set(mapper.getPropertyPath(d.getLocalName()), value);
+        }
     }
 
     String key(int i) {
-        return new ArrayList<String>(dbo.keySet()).get(i);
+        return new ArrayList<String>(featureDBO.keySet()).get(i);
     }
 
     Object get(String path) {
-        Object o = this.dbo;
-        String[] p = path.split("\\.");
-        for (int i = 0; i < p.length; i++) {
-            if (o == null || !(o instanceof DBObject)) {
-                break;
-            }
-            o = ((DBObject)o).get(p[i]);
-        }
-
-        return o;
+        return get(Arrays.asList(path.split("\\.")).iterator(), featureDBO);
     }
-
-    void set(String path, Object obj) {
-        DBObject dbo = this.dbo;
-        String[] p = path.split("\\.");
-        for(int i = 0; i < p.length-1; i++) {
-            if (!dbo.containsField(p[i])) {
-                dbo.put(p[i], new BasicDBObject());
+    
+    Object get(Iterator<String> path, Object currentDBO) {
+        if (path.hasNext()) {
+            if (currentDBO instanceof DBObject) {
+                String key = path.next();
+                Object value = ((DBObject)currentDBO).get(key);
+                return get(path, value);
             }
-            dbo = (DBObject) dbo.get(p[i]);
+            return null;
+        } else {
+            return currentDBO;
         }
-
-        dbo.put(p[p.length-1], obj);
+    }
+    
+    void set(String path, Object obj) {
+        set(Arrays.asList(path.split("\\.")).iterator(), obj, featureDBO);
+    }
+    
+    void set(Iterator<String> path, Object value, DBObject currentDBO) {
+        String key = path.next();
+        if (path.hasNext()) {
+            Object next = currentDBO.get(key);
+            DBObject nextDBO;
+            if (next instanceof DBObject) {
+                nextDBO = (DBObject)next;
+            } else {
+                currentDBO.put(key, nextDBO = new BasicDBObject());
+            }
+            set(path, value, nextDBO);
+        } else {
+            currentDBO.put(key, value);
+        }
     }
 
     Object convertToMongo(Object o) {
@@ -147,31 +185,37 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public int getAttributeCount() {
-        return dbo.keySet().size();
+        return featureType.getAttributeCount();
     }
 
     @Override
     public List<Object> getAttributes() {
-        List<Object> values = new ArrayList();
-        for (String key : dbo.keySet()) {
-            values.add(dbo.get(key));
+        List<Object> values = new ArrayList(getAttributeCount());
+        for (AttributeDescriptor d : featureType.getAttributeDescriptors()) {
+            values.add(getAttribute(d.getLocalName()));
         }
         return values;
     }
 
     @Override
     public void setAttributes(List<Object> values) {
-        throw new UnsupportedOperationException();
+        int index = 0;
+        for(Object value : values) {
+            setAttribute(index++, value);
+        }
     }
 
     @Override
     public void setAttributes(Object[] values) {
-        throw new UnsupportedOperationException();
+        int index = 0;
+        for(Object value : values) {
+            setAttribute(index++, value);
+        }
     }
 
     @Override
     public Map<Object, Object> getUserData() {
-        return Collections.emptyMap();
+        return userData;
     }
 
     @Override

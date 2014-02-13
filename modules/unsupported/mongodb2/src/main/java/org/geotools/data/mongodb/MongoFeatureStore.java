@@ -82,7 +82,7 @@ public class MongoFeatureStore extends ContentFeatureStore {
     @Override
     protected FeatureWriter<SimpleFeatureType, SimpleFeature> getWriterInternal(
         Query query, int flags) throws IOException {
-        if (flags == WRITER_ADD) {
+        if ((flags & (WRITER_ADD | WRITER_UPDATE)) != 0) {
             return new MongoAppendFeatureWriter(delegate.getCollection(), getSchema(), this);
         }
         return null;

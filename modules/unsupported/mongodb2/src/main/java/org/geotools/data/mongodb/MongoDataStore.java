@@ -1,5 +1,6 @@
 package org.geotools.data.mongodb;
 
+import com.mongodb.BasicDBObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,31 +14,25 @@ import org.geotools.filter.FilterCapabilities;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.Name;
-import org.opengis.filter.ExcludeFilter;
 import org.opengis.filter.Filter;
-import org.opengis.filter.Id;
-import org.opengis.filter.IncludeFilter;
 import org.opengis.filter.PropertyIsBetween;
 import org.opengis.filter.PropertyIsNull;
 import org.opengis.filter.spatial.BBOX;
-import org.opengis.filter.temporal.After;
-import org.opengis.filter.temporal.Before;
-import org.opengis.filter.temporal.Begins;
-import org.opengis.filter.temporal.BegunBy;
-import org.opengis.filter.temporal.During;
-import org.opengis.filter.temporal.EndedBy;
-import org.opengis.filter.temporal.Ends;
-import org.opengis.filter.temporal.TContains;
-import org.opengis.filter.temporal.TEquals;
 
-import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
+import com.mongodb.DBCollection;
+import com.mongodb.DBObject;
+import java.util.Iterator;
+import org.geotools.data.store.ContentState;
+import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 
 public class MongoDataStore extends ContentDataStore {
 
     DB db;
     FilterCapabilities filterCapabilities;
     CollectionMapper defaultMapper;
+    
+    SimpleFeatureType featureType;
 
     public MongoDataStore(DB db) {
         this.db = db;
@@ -88,7 +83,23 @@ public class MongoDataStore extends ContentDataStore {
 
     @Override
     public void createSchema(SimpleFeatureType featureType) throws IOException {
-        db.createCollection(featureType.getTypeName(), new BasicDBObject());
+
+        SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
+        builder.init(featureType);
+        
+        // need name with proper namespace URI
+        builder.setName(name(featureType.getTypeName()));
+        featureType = builder.buildFeatureType();
+        
+        DBCollection dbc = db.createCollection(featureType.getTypeName(), new BasicDBObject());
+        
+        // TODO:  is this the correct place for this?  Assumes schema mapping
+        dbc.ensureIndex(new BasicDBObject(getDefaultMapper().getGeometryPath(), "2dsphere"));
+       
+        ContentEntry entry = entry (featureType.getName());
+        ContentState state = entry.getState(null);
+        state.setFeatureType(featureType);
+        
     }
 
     @Override
@@ -104,9 +115,7 @@ public class MongoDataStore extends ContentDataStore {
     }
 
     @Override
-    protected ContentFeatureSource createFeatureSource(ContentEntry entry)
-            throws IOException {
-
+    protected ContentFeatureSource createFeatureSource(ContentEntry entry) throws IOException {
         return new MongoFeatureStore(entry, null);
     }
 

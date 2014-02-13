@@ -12,7 +12,6 @@ import org.geotools.data.simple.FilteringSimpleFeatureReader;
 import org.geotools.data.simple.SimpleFeatureReader;
 import org.geotools.data.store.ContentEntry;
 import org.geotools.data.store.ContentFeatureSource;
-import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.filter.visitor.PostPreProcessFilterSplittingVisitor;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.util.logging.Logging;
@@ -26,7 +25,6 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
-import com.vividsolutions.jts.geom.Geometry;
 
 public class MongoFeatureSource extends ContentFeatureSource {
 

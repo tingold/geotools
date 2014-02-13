@@ -57,7 +57,7 @@ public class GeoJSONMapper extends CollectionMapper {
         tb.setName(name);
         tb.add("geometry", Geometry.class, DefaultGeographicCRS.WGS84);
         DBObject rootDBO = collection.findOne();
-        if (rootDBO.containsField("properties")) {
+        if (rootDBO != null && rootDBO.containsField("properties")) {
           DBObject propertiesDBO = (DBObject)rootDBO.get("properties");
           for (String key : propertiesDBO.keySet()) {
               Object v = propertiesDBO.get(key);
@@ -72,7 +72,7 @@ public class GeoJSONMapper extends CollectionMapper {
               } else if (v instanceof Boolean) {
                 tb.add(key, v.getClass());
               } else if (v instanceof Date) {
-                tb.add(key, Date.class);
+                tb.add(key, v.getClass());
               } else if (v instanceof BSONTimestamp) {
                 tb.add(key, Date.class);
               } else {
