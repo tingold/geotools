@@ -1,15 +1,18 @@
 package org.geotools.data.mongodb;
 
 import com.mongodb.BasicDBObject;
+import com.mongodb.DB;
+import com.mongodb.DBCollection;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.geotools.data.FeatureWriter;
 import org.geotools.data.Transaction;
 import org.geotools.data.store.ContentDataStore;
 import org.geotools.data.store.ContentEntry;
 import org.geotools.data.store.ContentFeatureSource;
+import org.geotools.data.store.ContentState;
+import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.filter.FilterCapabilities;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -18,13 +21,6 @@ import org.opengis.filter.Filter;
 import org.opengis.filter.PropertyIsBetween;
 import org.opengis.filter.PropertyIsNull;
 import org.opengis.filter.spatial.BBOX;
-
-import com.mongodb.DB;
-import com.mongodb.DBCollection;
-import com.mongodb.DBObject;
-import java.util.Iterator;
-import org.geotools.data.store.ContentState;
-import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 
 public class MongoDataStore extends ContentDataStore {
 
@@ -84,18 +80,16 @@ public class MongoDataStore extends ContentDataStore {
     @Override
     public void createSchema(SimpleFeatureType featureType) throws IOException {
 
+        // Need to generate FeatureType instance with proper namespace URI
         SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
         builder.init(featureType);
-        
-        // need name with proper namespace URI
         builder.setName(name(featureType.getTypeName()));
         featureType = builder.buildFeatureType();
         
-        DBCollection dbc = db.createCollection(featureType.getTypeName(), new BasicDBObject());
-        
-        // TODO:  is this the correct place for this?  Assumes schema mapping
-        dbc.ensureIndex(new BasicDBObject(getDefaultMapper().getGeometryPath(), "2dsphere"));
+        // Collection needs to exist so that it's returned with createTypeNames()
+        db.createCollection(featureType.getTypeName(), new BasicDBObject());
        
+        // Store FeatureType instance since it can't be inferred (no documents)
         ContentEntry entry = entry (featureType.getName());
         ContentState state = entry.getState(null);
         state.setFeatureType(featureType);

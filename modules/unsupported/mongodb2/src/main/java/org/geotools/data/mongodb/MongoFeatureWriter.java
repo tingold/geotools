@@ -1,23 +1,21 @@
 package org.geotools.data.mongodb;
 
+import com.mongodb.BasicDBObject;
+import com.mongodb.DBCollection;
 import java.io.IOException;
-
 import org.geotools.data.simple.SimpleFeatureWriter;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 
-import com.mongodb.BasicDBObject;
-import com.mongodb.DBCollection;
+public class MongoFeatureWriter implements SimpleFeatureWriter {
 
-public class MongoAppendFeatureWriter implements SimpleFeatureWriter {
+    private final DBCollection collection;
+    private final SimpleFeatureType featureType;
 
-    DBCollection collection;
-    SimpleFeatureType featureType;
+    private final CollectionMapper mapper;
+    private MongoDBObjectFeature current;
 
-    CollectionMapper mapper;
-    MongoWriteFeature current;
-
-    public MongoAppendFeatureWriter(DBCollection collection, SimpleFeatureType featureType, 
+    public MongoFeatureWriter(DBCollection collection, SimpleFeatureType featureType, 
         MongoFeatureStore featureStore) {
         this.collection = collection;
         this.featureType = featureType;
@@ -36,7 +34,7 @@ public class MongoAppendFeatureWriter implements SimpleFeatureWriter {
 
     @Override
     public SimpleFeature next() throws IOException {
-        return current = new MongoWriteFeature(new BasicDBObject(), featureType, mapper);
+        return current = new MongoDBObjectFeature(new BasicDBObject(), featureType, mapper);
     }
     
     @Override
@@ -44,7 +42,6 @@ public class MongoAppendFeatureWriter implements SimpleFeatureWriter {
         if (current == null) {
             throw new IllegalStateException("No current feature, must call next() before write()");
         }
-
         collection.save(current.getObject());
     }
 
@@ -55,8 +52,7 @@ public class MongoAppendFeatureWriter implements SimpleFeatureWriter {
     
     @Override
     public void close() throws IOException {
-        // TODO Auto-generated method stub
-    
+        collection.ensureIndex(new BasicDBObject(mapper.getGeometryPath(), "2dsphere"));
     }
 
 }

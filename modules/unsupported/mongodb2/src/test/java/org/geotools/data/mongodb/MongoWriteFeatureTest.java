@@ -8,9 +8,9 @@ public class MongoWriteFeatureTest {
     @Test
     public void set() {
         BasicDBObject obj = new BasicDBObject();
-        MongoWriteFeature f = new MongoWriteFeature(obj, null, new AddHocMapper());
-        f.set("root.child1", 1d);
-        f.get("root.child1");
+        MongoDBObjectFeature f = new MongoDBObjectFeature(obj, null, new AddHocMapper());
+        f.setDBOValue("root.child1", 1d);
+        f.getDBOValue("root.child1");
         
     }
 }

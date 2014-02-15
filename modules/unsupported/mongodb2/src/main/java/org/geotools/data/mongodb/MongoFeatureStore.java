@@ -1,7 +1,6 @@
 package org.geotools.data.mongodb;
 
 import java.io.IOException;
-
 import org.geotools.data.FeatureReader;
 import org.geotools.data.FeatureWriter;
 import org.geotools.data.Query;
@@ -83,7 +82,7 @@ public class MongoFeatureStore extends ContentFeatureStore {
     protected FeatureWriter<SimpleFeatureType, SimpleFeature> getWriterInternal(
         Query query, int flags) throws IOException {
         if ((flags & (WRITER_ADD | WRITER_UPDATE)) != 0) {
-            return new MongoAppendFeatureWriter(delegate.getCollection(), getSchema(), this);
+            return new MongoFeatureWriter(delegate.getCollection(), getSchema(), this);
         }
         return null;
     }

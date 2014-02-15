@@ -2,6 +2,7 @@ package org.geotools.data.mongodb;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
+import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -10,7 +11,12 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import org.geotools.feature.GeometryAttributeImpl;
+import org.geotools.feature.type.AttributeDescriptorImpl;
 import org.geotools.filter.identity.FeatureIdImpl;
+import org.geotools.geometry.jts.JTS;
+import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.GeometryAttribute;
 import org.opengis.feature.Property;
 import org.opengis.feature.simple.SimpleFeature;
@@ -20,21 +26,20 @@ import org.opengis.feature.type.GeometryDescriptor;
 import org.opengis.feature.type.Name;
 import org.opengis.filter.identity.FeatureId;
 import org.opengis.geometry.BoundingBox;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
-public class MongoWriteFeature implements SimpleFeature {
+public class MongoDBObjectFeature implements SimpleFeature {
 
     private final SimpleFeatureType featureType;
     private final DBObject featureDBO;
     private final CollectionMapper mapper;
     
-    private final Map<Object, Object> userData; 
+    private Map<Object, Object> userData; 
 
-    public MongoWriteFeature(DBObject dbo, SimpleFeatureType featureType, CollectionMapper mapper) {
+    public MongoDBObjectFeature(DBObject dbo, SimpleFeatureType featureType, CollectionMapper mapper) {
         this.featureDBO = dbo;
         this.featureType = featureType;
         this.mapper = mapper;
-        
-        userData = new HashMap<Object, Object>();
     }
 
     public DBObject getObject() {
@@ -48,7 +53,7 @@ public class MongoWriteFeature implements SimpleFeature {
     
     @Override
     public SimpleFeatureType getFeatureType() {
-        return featureType;
+        return getType();
     }
 
     @Override
@@ -65,90 +70,90 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public BoundingBox getBounds() {
-        // TODO Auto-generated method stub
+        Object o = getDefaultGeometry();
+        if ( o instanceof Geometry ) {
+            CoordinateReferenceSystem crs = featureType.getCoordinateReferenceSystem();
+            if (crs == null) {
+                crs = DefaultGeographicCRS.WGS84;
+            }
+            Envelope bounds = ReferencedEnvelope.create( crs );
+            bounds.init(JTS.bounds((Geometry)o, crs ));
+            return (BoundingBox)bounds;
+        }
         return null;
     }
 
     @Override
     public Object getDefaultGeometry() {
-        Object o = get(mapper.getGeometryPath());
+        Object o = getDBOValue(mapper.getGeometryPath());
         return o instanceof DBObject ? mapper.getGeometry((DBObject)o) : null;
     }
 
     @Override
     public void setDefaultGeometry(Object geometry) {
-        geometry = convertToMongo(geometry);
-        set(mapper.getGeometryPath(), geometry);
+        geometry = convertToDBOValue(geometry);
+        setDBOValue(mapper.getGeometryPath(), geometry);
     }
 
     @Override
     public Object getAttribute(Name name) {
-        return getAttribute(name.getLocalPart());
+        return doGetAttribute(featureType.getDescriptor(name));
+    }
+    
+    @Override
+    public void setAttribute(Name name, Object value) {
+        doSetAttribute(featureType.getDescriptor(name), value);
     }
 
     @Override
     public Object getAttribute(String name) {
-        AttributeDescriptor d = featureType.getDescriptor(name);
-        if (d instanceof GeometryDescriptor) {
-            Object o = get(mapper.getGeometryPath());
-            return o instanceof DBObject ?
-                    mapper.getGeometry((DBObject)o) : null;
-        }
-        return get(mapper.getPropertyPath(name));
+        return doGetAttribute(featureType.getDescriptor(name));
     }
 
-    @Override
-    public void setAttribute(Name name, Object value) {
-        setAttribute(name.getLocalPart(), value);
-    }
 
     @Override
     public void setAttribute(String name, Object value) {
-        value = convertToMongo(value);
-        AttributeDescriptor d = featureType.getDescriptor(name);
-        if (d instanceof GeometryDescriptor) {
-            set(mapper.getGeometryPath(), value);
-        } else {
-            set(mapper.getPropertyPath(d.getLocalName()), value);
-        }
+        doSetAttribute(featureType.getDescriptor(name), value);
     }
 
     @Override
     public Object getAttribute(int index) throws IndexOutOfBoundsException {
-        AttributeDescriptor d = featureType.getDescriptor(index);
-        if (d instanceof GeometryDescriptor) {
-            Object o = get(mapper.getGeometryPath());
-            return o instanceof DBObject ?
-                    mapper.getGeometry((DBObject)o) : null;
-        }
-        return get(mapper.getPropertyPath(d.getLocalName()));
+        return doGetAttribute(featureType.getDescriptor(index));
     }
 
     @Override
     public void setAttribute(int index, Object value) throws IndexOutOfBoundsException {
-        value = convertToMongo(value);
-        AttributeDescriptor d = featureType.getDescriptor(index);
-        if (d instanceof GeometryDescriptor) {
-            set(mapper.getGeometryPath(), value);
-        } else {
-            set(mapper.getPropertyPath(d.getLocalName()), value);
-        }
-    }
-
-    String key(int i) {
-        return new ArrayList<String>(featureDBO.keySet()).get(i);
-    }
-
-    Object get(String path) {
-        return get(Arrays.asList(path.split("\\.")).iterator(), featureDBO);
+        doSetAttribute(featureType.getDescriptor(index), value);
     }
     
-    Object get(Iterator<String> path, Object currentDBO) {
+    private Object doGetAttribute(AttributeDescriptor d) throws IndexOutOfBoundsException {
+        if (d instanceof GeometryDescriptor) {
+            Object o = getDBOValue(mapper.getGeometryPath());
+            return o instanceof DBObject ?
+                    mapper.getGeometry((DBObject)o) : null;
+        }
+        return getDBOValue(mapper.getPropertyPath(d.getLocalName()));
+    }
+
+    private void doSetAttribute(AttributeDescriptor d, Object o) {
+        o = convertToDBOValue(o);
+        if (d instanceof GeometryDescriptor) {
+            setDBOValue(mapper.getGeometryPath(), o);
+        } else {
+            setDBOValue(mapper.getPropertyPath(d.getLocalName()), o);
+        }
+    }
+    
+    Object getDBOValue(String path) {
+        return getDBOValue(Arrays.asList(path.split("\\.")).iterator(), featureDBO);
+    }
+    
+    Object getDBOValue(Iterator<String> path, Object currentDBO) {
         if (path.hasNext()) {
             if (currentDBO instanceof DBObject) {
                 String key = path.next();
                 Object value = ((DBObject)currentDBO).get(key);
-                return get(path, value);
+                return getDBOValue(path, value);
             }
             return null;
         } else {
@@ -156,11 +161,11 @@ public class MongoWriteFeature implements SimpleFeature {
         }
     }
     
-    void set(String path, Object obj) {
-        set(Arrays.asList(path.split("\\.")).iterator(), obj, featureDBO);
+    void setDBOValue(String path, Object obj) {
+        setDBOValue(Arrays.asList(path.split("\\.")).iterator(), obj, featureDBO);
     }
     
-    void set(Iterator<String> path, Object value, DBObject currentDBO) {
+    void setDBOValue(Iterator<String> path, Object value, DBObject currentDBO) {
         String key = path.next();
         if (path.hasNext()) {
             Object next = currentDBO.get(key);
@@ -170,13 +175,13 @@ public class MongoWriteFeature implements SimpleFeature {
             } else {
                 currentDBO.put(key, nextDBO = new BasicDBObject());
             }
-            set(path, value, nextDBO);
+            setDBOValue(path, value, nextDBO);
         } else {
             currentDBO.put(key, value);
         }
     }
 
-    Object convertToMongo(Object o) {
+    Object convertToDBOValue(Object o) {
         if (o instanceof Geometry) {
             o =  mapper.toObject((Geometry)o);
         }
@@ -190,9 +195,10 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public List<Object> getAttributes() {
-        List<Object> values = new ArrayList(getAttributeCount());
-        for (AttributeDescriptor d : featureType.getAttributeDescriptors()) {
-            values.add(getAttribute(d.getLocalName()));
+        int aCount = getAttributeCount();
+        List<Object> values = new ArrayList(aCount);
+        for (int aIndex = 0; aIndex < aCount; aIndex++) {
+            values.add(getAttribute(aIndex));
         }
         return values;
     }
@@ -215,17 +221,29 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public Map<Object, Object> getUserData() {
+        if (userData == null) {
+            userData = new HashMap<Object, Object>();
+        }
         return userData;
     }
 
     @Override
     public GeometryAttribute getDefaultGeometryProperty() {
-        throw new UnsupportedOperationException();
+        GeometryDescriptor geometryDescriptor = featureType.getGeometryDescriptor();
+        GeometryAttribute geometryAttribute = null;
+        if(geometryDescriptor != null){
+            Object defaultGeometry = getDefaultGeometry();
+            geometryAttribute = new GeometryAttributeImpl(defaultGeometry, geometryDescriptor, null);            
+        }
+        return geometryAttribute;
     }
 
     @Override
-    public void setDefaultGeometryProperty(GeometryAttribute defaultGeometry) {
-        throw new UnsupportedOperationException();
+    public void setDefaultGeometryProperty(GeometryAttribute geometryAttribute) {
+        if(geometryAttribute != null)
+            setDefaultGeometry(geometryAttribute.getValue());
+        else
+            setDefaultGeometry(null);
     }
 
     @Override
@@ -265,23 +283,25 @@ public class MongoWriteFeature implements SimpleFeature {
 
     @Override
     public AttributeDescriptor getDescriptor() {
-        throw new UnsupportedOperationException();
+        return new AttributeDescriptorImpl(featureType, featureType.getName(), 0,
+                Integer.MAX_VALUE, true, null);
     }
 
     @Override
     public Name getName() {
-        throw new UnsupportedOperationException();
+        return featureType.getName();
     }
 
     @Override
     public boolean isNillable() {
-        throw new UnsupportedOperationException();
+        return true;
     }
 
     @Override
     public void setValue(Object value) {
         throw new UnsupportedOperationException();
     }
+    
     @Override
     public void validate() {
     }
