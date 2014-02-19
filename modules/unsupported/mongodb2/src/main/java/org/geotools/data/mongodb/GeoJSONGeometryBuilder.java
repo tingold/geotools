@@ -24,6 +24,8 @@ import com.vividsolutions.jts.geom.Polygon;
 public class GeoJSONGeometryBuilder {
 
     GeometryFactory geomFactory;
+    
+    boolean opportunisticMultiGeometryCoversion = true;
 
     public GeoJSONGeometryBuilder() {
         this(new GeometryFactory());
@@ -108,6 +110,9 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(MultiPolygon mp) {
+        if (opportunisticMultiGeometryCoversion && mp.getNumGeometries() == 1) {
+            return toObject((Polygon)mp.getGeometryN(0));
+        }
         List l = new BasicDBList();
         for (int i = 0; i < mp.getNumGeometries(); i++) {
             l.add(toList(((Polygon)mp.getGeometryN(i))));
@@ -127,11 +132,13 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(MultiLineString ml) {
+        if (opportunisticMultiGeometryCoversion && ml.getNumGeometries() == 1) {
+            return toObject((LineString)ml.getGeometryN(0));
+        }
         List l = new BasicDBList();
         for (int i = 0; i < ml.getNumGeometries(); i++) {
             l.add(toList(((LineString)ml.getGeometryN(i)).getCoordinateSequence()));
         }
-
         return BasicDBObjectBuilder.start()
             .add("type", "MultiLineString")
             .add("coordinates", l)
@@ -147,6 +154,9 @@ public class GeoJSONGeometryBuilder {
     }
 
     public DBObject toObject(MultiPoint mp) {
+        if (opportunisticMultiGeometryCoversion && mp.getNumGeometries() == 1) {
+            return toObject((Point)mp.getGeometryN(0));
+        }
         return BasicDBObjectBuilder.start()
             .add("type", "MultiPoint")
             .add("coordinates", toList(mp.getCoordinates()))
