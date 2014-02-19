@@ -2,7 +2,6 @@ package org.geotools.data.mongodb;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
-import com.mongodb.DBCollection;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +13,8 @@ import org.geotools.data.store.ContentFeatureSource;
 import org.geotools.data.store.ContentState;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.filter.FilterCapabilities;
+import org.geotools.referencing.CRS;
+import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.Name;
@@ -21,14 +22,13 @@ import org.opengis.filter.Filter;
 import org.opengis.filter.PropertyIsBetween;
 import org.opengis.filter.PropertyIsNull;
 import org.opengis.filter.spatial.BBOX;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 public class MongoDataStore extends ContentDataStore {
 
     DB db;
     FilterCapabilities filterCapabilities;
     CollectionMapper defaultMapper;
-    
-    SimpleFeatureType featureType;
 
     public MongoDataStore(DB db) {
         this.db = db;
@@ -78,22 +78,28 @@ public class MongoDataStore extends ContentDataStore {
     }
 
     @Override
-    public void createSchema(SimpleFeatureType featureType) throws IOException {
+    public void createSchema(SimpleFeatureType incoming) throws IOException {
 
+        CoordinateReferenceSystem incomingCRS = incoming.getCoordinateReferenceSystem();
+        if (incomingCRS == null) {
+            incoming.getGeometryDescriptor().getCoordinateReferenceSystem();
+        }
+        if (!CRS.equalsIgnoreMetadata(incomingCRS, DefaultGeographicCRS.WGS84)) {
+            throw new IllegalArgumentException("Unsupported coordinate reference system, only WGS84 supported");
+        }
         // Need to generate FeatureType instance with proper namespace URI
         SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
-        builder.init(featureType);
-        builder.setName(name(featureType.getTypeName()));
-        featureType = builder.buildFeatureType();
+        builder.init(incoming);
+        builder.setName(name(incoming.getTypeName()));
+        incoming = builder.buildFeatureType();
         
         // Collection needs to exist so that it's returned with createTypeNames()
-        db.createCollection(featureType.getTypeName(), new BasicDBObject());
+        db.createCollection(incoming.getTypeName(), new BasicDBObject());
        
         // Store FeatureType instance since it can't be inferred (no documents)
-        ContentEntry entry = entry (featureType.getName());
+        ContentEntry entry = entry (incoming.getName());
         ContentState state = entry.getState(null);
-        state.setFeatureType(featureType);
-        
+        state.setFeatureType(incoming);
     }
 
     @Override
