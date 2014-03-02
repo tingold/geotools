@@ -5,9 +5,7 @@ import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Geometry;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import org.bson.types.BSONTimestamp;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.simple.SimpleFeature;
@@ -54,27 +52,21 @@ public class GeoJSONMapper extends CollectionMapper {
     public SimpleFeatureType buildFeatureType(Name name, DBCollection collection) {
         
         SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
+        
         tb.setName(name);
+        tb.userData("mapping", "geometry");
+        tb.userData("encoding", "GeoJSON");
         tb.add("geometry", Geometry.class, DefaultGeographicCRS.WGS84);
+        
         DBObject rootDBO = collection.findOne();
         if (rootDBO != null && rootDBO.containsField("properties")) {
           DBObject propertiesDBO = (DBObject)rootDBO.get("properties");
           for (String key : propertiesDBO.keySet()) {
               Object v = propertiesDBO.get(key);
-              if (v instanceof String) {
-                tb.add(key, v.getClass());
-              } else if (v instanceof Double) {
-                tb.add(key, v.getClass());
-              } else if (v instanceof Long) {
-                tb.add(key, v.getClass());
-              } else if (v instanceof Integer) {
-                tb.add(key, v.getClass());
-              } else if (v instanceof Boolean) {
-                tb.add(key, v.getClass());
-              } else if (v instanceof Date) {
-                tb.add(key, v.getClass());
-              } else if (v instanceof BSONTimestamp) {
-                tb.add(key, Date.class);
+              Class<?> binding = MongoUtil.mapBSONObjectToJavaType(v);
+              if (binding != null) {
+                  tb.userData("mapping", "properties." + key);
+                  tb.add(key, binding);
               } else {
                 System.err.println("unmapped key, " + key + " with type of " + v.getClass().getCanonicalName());
               }
@@ -86,21 +78,19 @@ public class GeoJSONMapper extends CollectionMapper {
     @Override
     public SimpleFeature buildFeature(DBObject rootDBO, SimpleFeatureType featureType) {
       
-        DBObject propertiesDBO = (DBObject) rootDBO.get("properties");
-
-        List<AttributeDescriptor> descriptors = featureType.getAttributeDescriptors();
-        List values = new ArrayList(descriptors.size());
+        String gdLocalName = featureType.getGeometryDescriptor().getLocalName();
+        List<AttributeDescriptor> adList = featureType.getAttributeDescriptors();
         
-        for (AttributeDescriptor descriptor : descriptors) {
-          String name = descriptor.getLocalName();
-          if ("geometry".equals(name)) {
+        List values = new ArrayList(adList.size());      
+        for (AttributeDescriptor descriptor : adList) {
+          String adLocalName = descriptor.getLocalName();
+          if (gdLocalName.equals(adLocalName)) {
             values.add(getGeometry(rootDBO));
           } else {
-            values.add(propertiesDBO == null ? null : propertiesDBO.get(name));
+            values.add(MongoUtil.getDBOValue(rootDBO, (String)descriptor.getUserData().get(MongoDataStore.KEY_mapping)));
           }
         }
         
         return new MongoFeature(values.toArray(), featureType, rootDBO.get("_id").toString());
     }
-   
 }

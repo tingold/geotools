@@ -1,14 +1,11 @@
 package org.geotools.data.mongodb;
 
-import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import org.geotools.feature.GeometryAttributeImpl;
@@ -92,7 +89,7 @@ public class MongoDBObjectFeature implements SimpleFeature {
     @Override
     public void setDefaultGeometry(Object geometry) {
         geometry = convertToDBOValue(geometry);
-        setDBOValue(mapper.getGeometryPath(), geometry);
+        MongoUtil.setDBOValue(featureDBO, mapper.getGeometryPath(), geometry);
     }
 
     @Override
@@ -138,49 +135,16 @@ public class MongoDBObjectFeature implements SimpleFeature {
     private void doSetAttribute(AttributeDescriptor d, Object o) {
         o = convertToDBOValue(o);
         if (d instanceof GeometryDescriptor) {
-            setDBOValue(mapper.getGeometryPath(), o);
+            MongoUtil.setDBOValue(featureDBO, mapper.getGeometryPath(), o);
         } else {
-            setDBOValue(mapper.getPropertyPath(d.getLocalName()), o);
+            MongoUtil.setDBOValue(featureDBO, mapper.getPropertyPath(d.getLocalName()), o);
         }
     }
     
     Object getDBOValue(String path) {
-        return getDBOValue(Arrays.asList(path.split("\\.")).iterator(), featureDBO);
+        return MongoUtil.getDBOValue(featureDBO, path);
     }
     
-    Object getDBOValue(Iterator<String> path, Object currentDBO) {
-        if (path.hasNext()) {
-            if (currentDBO instanceof DBObject) {
-                String key = path.next();
-                Object value = ((DBObject)currentDBO).get(key);
-                return getDBOValue(path, value);
-            }
-            return null;
-        } else {
-            return currentDBO;
-        }
-    }
-    
-    void setDBOValue(String path, Object obj) {
-        setDBOValue(Arrays.asList(path.split("\\.")).iterator(), obj, featureDBO);
-    }
-    
-    void setDBOValue(Iterator<String> path, Object value, DBObject currentDBO) {
-        String key = path.next();
-        if (path.hasNext()) {
-            Object next = currentDBO.get(key);
-            DBObject nextDBO;
-            if (next instanceof DBObject) {
-                nextDBO = (DBObject)next;
-            } else {
-                currentDBO.put(key, nextDBO = new BasicDBObject());
-            }
-            setDBOValue(path, value, nextDBO);
-        } else {
-            currentDBO.put(key, value);
-        }
-    }
-
     Object convertToDBOValue(Object o) {
         if (o instanceof Geometry) {
             o =  mapper.toObject((Geometry)o);
