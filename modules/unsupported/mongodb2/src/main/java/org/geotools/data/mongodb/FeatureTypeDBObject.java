@@ -18,6 +18,7 @@ import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.GeometryDescriptor;
+import org.opengis.feature.type.Name;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
@@ -46,6 +47,10 @@ public class FeatureTypeDBObject {
     public static DBObject convert(SimpleFeatureType ft) {
         
         DBObject ftDBO = new BasicDBObject(KEY_typeName, ft.getTypeName());
+        Map<String, String> ftUserData = typeCheck(ft.getUserData());
+        if (!ftUserData.isEmpty()) {
+            ftDBO.put(KEY_userData, new BasicDBObject(ftUserData));
+        }
         
         //  for geometry descriptor, just store name to reference against attribute
         GeometryDescriptor gd = ft.getGeometryDescriptor();
@@ -76,19 +81,9 @@ public class FeatureTypeDBObject {
             Class<?> binding = ad instanceof GeometryDescriptor ?
                 Geometry.class : ad.getType().getBinding();
             adDBO.put(KEY_type, new BasicDBObject(KEY_binding, binding.getName()));
-            Map<?, ?> ud = ad.getUserData();
-            if (ud != null && !ud.isEmpty()) {
-                Map<String, String> udTypeChecked = new LinkedHashMap<String, String>();
-                for (Map.Entry entry : ud.entrySet()) {
-                    Object key = entry.getKey();
-                    Object value = entry.getValue();
-                    if (key instanceof String && value instanceof String) {
-                        udTypeChecked.put((String)key, (String)value);
-                    }
-                }
-                if (!udTypeChecked.isEmpty()) {
-                    adDBO.put(KEY_userData, new BasicDBObject(udTypeChecked));
-                }
+            Map<String, String> adUserData = typeCheck(ad.getUserData());
+            if (!adUserData.isEmpty()) {
+                adDBO.put(KEY_userData, new BasicDBObject(adUserData));
             }
             adDBL.add(adDBO);
         }
@@ -96,11 +91,19 @@ public class FeatureTypeDBObject {
         return ftDBO;
     }
 
-    public static SimpleFeatureTypeBuilder convert(DBObject ftDBO) {
+    public static SimpleFeatureType convert(DBObject ftDBO) {
+        return convert(ftDBO, null);
+    }
+    
+    public static SimpleFeatureType convert(DBObject ftDBO, Name name) {
         
         SimpleFeatureTypeBuilder ftBuilder = new SimpleFeatureTypeBuilder();
         
-        ftBuilder.setName(extractString(ftDBO, KEY_typeName));
+        if (name == null) {
+            ftBuilder.setName(extractString(ftDBO, KEY_typeName));
+        } else {
+            ftBuilder.setName(name);
+        }
         
         DBObject gdDBO = extractDBObject(ftDBO, KEY_geometryDescriptor);
         String gdLocalName = extractString(gdDBO, KEY_localName);
@@ -120,9 +123,9 @@ public class FeatureTypeDBObject {
                 } catch (ClassNotFoundException ex) {
                     throw new RuntimeException("Unable to generate Class instance for binding " + bindingName);
                 }
-                BasicDBObject udDBO = extractDBObject(adDBO, KEY_userData, false);
-                if (udDBO != null) {
-                    for (Map.Entry entry : ((Map<?,?>)udDBO.toMap()).entrySet()) {
+                BasicDBObject adUserDataDBO = extractDBObject(adDBO, KEY_userData, false);
+                if (adUserDataDBO != null) {
+                    for (Map.Entry entry : ((Map<?,?>)adUserDataDBO.toMap()).entrySet()) {
                         atBuilder.userData(entry.getKey(), entry.getValue());
                     }
                 }
@@ -147,7 +150,30 @@ public class FeatureTypeDBObject {
             }
         }
        
-        return ftBuilder;
+        SimpleFeatureType ft = ftBuilder.buildFeatureType();
+        
+        BasicDBObject ftUserDataDBO = extractDBObject(ftDBO, KEY_userData, false);
+        if (ftUserDataDBO != null) {
+            Map ftUserData = ft.getUserData();
+            for (Map.Entry entry : ((Map<?,?>)ftUserDataDBO.toMap()).entrySet()) {
+                ftUserData.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return ft;
+    }
+    
+    private static Map<String, String> typeCheck(Map<?,?> map) {
+        Map<String, String> typeChecked = new LinkedHashMap<String, String>();
+        if (map != null && !map.isEmpty()) {
+            for (Map.Entry entry : map.entrySet()) {
+                Object key = entry.getKey();
+                Object value = entry.getValue();
+                if (key instanceof String && value instanceof String) {
+                    typeChecked.put((String)key, (String)value);
+                }
+            }
+        }
+        return typeChecked;
     }
     
     private static <T> T extractAndVerifyType(Class<T> type, DBObject dbo, String key, boolean required) {

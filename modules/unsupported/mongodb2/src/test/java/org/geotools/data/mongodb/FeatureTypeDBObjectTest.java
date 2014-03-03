@@ -51,6 +51,7 @@ public class FeatureTypeDBObjectTest {
         builder.add("prop3", Integer.class);
         
         SimpleFeatureType original = builder.buildFeatureType();
+        original.getUserData().put("sample-key", "sample-value");
         
         DBObject dbo = FeatureTypeDBObject.convert(original);
         
@@ -64,10 +65,18 @@ public class FeatureTypeDBObjectTest {
         assertThat(o, is(instanceOf(DBObject.class)));
         dbo = (DBObject)o;
         
-        SimpleFeatureType result = FeatureTypeDBObject.convert(dbo).buildFeatureType();
+        SimpleFeatureType result = FeatureTypeDBObject.convert(dbo);
         
         // verify we persist and restore name
         assertThat(result.getTypeName(), is(equalTo(original.getTypeName())));
+        // verify feature type user data persisted
+        Map<?,?> resultUserData = result.getUserData();
+        Map<?,?> originalUserData = original.getUserData();
+        assertThat(resultUserData.size(), is(equalTo(originalUserData.size())));
+        for (Map.Entry entry : resultUserData.entrySet()) {
+            assertThat(entry.getValue(), is(equalTo(originalUserData.get(entry.getKey()))));
+        }
+        
         // verify we persist and restore same number of attributes
         assertThat(result.getAttributeCount(), is(equalTo(original.getAttributeCount())));
         

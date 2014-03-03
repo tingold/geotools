@@ -1,22 +1,19 @@
 package org.geotools.data.mongodb;
 
-import java.util.Map;
+import com.mongodb.DB;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientURI;
+import com.vividsolutions.jts.geom.Point;
 import java.util.Properties;
-
 import org.geotools.test.OnlineTestCase;
 import org.opengis.feature.simple.SimpleFeature;
-
-import com.mongodb.BasicDBList;
-import com.mongodb.BasicDBObject;
-import com.mongodb.BasicDBObjectBuilder;
-import com.mongodb.DB;
-import com.mongodb.DBCollection;
-import com.vividsolutions.jts.geom.Point;
 
 public abstract class MongoTestSupport extends OnlineTestCase {
 
     protected MongoTestSetup testSetup;
     protected MongoDataStore dataStore;
+    
+    protected MongoClient client;
 
     protected MongoTestSupport(MongoTestSetup testSetup) {
         this.testSetup = testSetup;
@@ -38,8 +35,9 @@ public abstract class MongoTestSupport extends OnlineTestCase {
     }
 
     DB doConnect() throws Exception {
-        MongoDataStoreFactory factory = new MongoDataStoreFactory();
-        return factory.connect((Map)fixture);
+        MongoClientURI clientURI = new MongoClientURI(fixture.getProperty(MongoDataStoreFactory.DATASTORE_URI.key));
+        client = new MongoClient(clientURI);
+        return client.getDB(clientURI.getDatabase());
     }
 
     protected void setUp(DB db) throws Exception {
@@ -51,16 +49,13 @@ public abstract class MongoTestSupport extends OnlineTestCase {
     protected void tearDownInternal() throws Exception {
         super.tearDownInternal();
         dataStore.dispose();
+        client.close();
     }
 
     @Override
     protected Properties createExampleFixture() {
         Properties fixture = new Properties();
-        fixture.put("host", "localhost");
-        fixture.put("port", "27017");
-        fixture.put("database", "geotools");
-        fixture.put("user", "geotools");
-        fixture.put("passwd", "geotools");
+        fixture.put(MongoDataStoreFactory.DATASTORE_URI.key, "mongodb://geotools:geotools@localhost:27017/geotools");
         return fixture;
     }
 

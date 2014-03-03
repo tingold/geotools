@@ -2,15 +2,11 @@ package org.geotools.data.mongodb;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
-import com.mongodb.DBObject;
-import com.mongodb.util.JSON;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientURI;
 import java.io.IOException;
-import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -39,79 +35,75 @@ public class MongoDataStore extends ContentDataStore {
     
     final static String KEY_mapping = "mapping";
     final static String KEY_encoding = "encoding";
+    final static String KEY_collection = "collection";
 
-    DB db;
+    final MongoSchemaStore schemaStore;
+    
+    final MongoClient dataStoreClient;
+    final DB dataStoreDB;
+    
     FilterCapabilities filterCapabilities;
     CollectionMapper defaultMapper;
     
-    final URI schemaStoreURI;
-
-    public MongoDataStore(DB db) {
-        this(db, null);
+    public MongoDataStore(String dataStoreURI) {
+        this(dataStoreURI, null);
     }
     
-    public MongoDataStore(DB db, URI schemaStoreRUI) {
-        this.db = db;
-        this.schemaStoreURI = schemaStoreRUI != null ? schemaStoreRUI :
-                new File(System.getProperty("user.dir"), ".geotools/mongodb-schemas/").toURI();
+    public MongoDataStore(String dataStoreURI, String schemaStoreURI) {
+        MongoClientURI dataStoreClientURI = createMongoClientURI(dataStoreURI);
+        dataStoreClient = createMongoClient(dataStoreClientURI);
+        dataStoreDB = createDB(dataStoreClient, dataStoreClientURI.getDatabase(), true);
+        if (dataStoreDB == null) {
+            dataStoreClient.close(); // This smells bad...
+            throw new IllegalArgumentException("Unknown mongodb database, \"" + dataStoreClientURI.getDatabase() + "\"");
+        }
+        
+        schemaStore = createSchemaStore(schemaStoreURI);
+        
         filterCapabilities = createFilterCapabilties();
         defaultMapper = new GeoJSONMapper();
-        
-        initializeSchemaStore();
     }
     
-    private void initializeSchemaStore() {
-        final String scheme = schemaStoreURI.getScheme();
-        if ("file".equals(scheme)) {
-            File file = new File(schemaStoreURI.getPath());
-            file.mkdirs();
-        } /* else if ("mongodb".equals(scheme)) {
-            // TODO 
-        } */ else {
-            throw new IllegalArgumentException("Unsupported URI protocal for MongoDB DataStore schema storage");
+    final MongoClientURI createMongoClientURI(String dataStoreURI) {
+        if (dataStoreURI == null) {
+            throw new IllegalArgumentException("dataStoreURI may not be null");
+        }
+        if (!dataStoreURI.startsWith("mongodb://")) {
+            throw new IllegalArgumentException("incorrect scheme for URI, expected to begin with \"mongodb://\", found URI of \"" + dataStoreURI + "\"");
+        }
+        return new MongoClientURI(dataStoreURI.toString());
+    }
+        
+    final MongoClient createMongoClient(MongoClientURI mongoClientURI) {
+        try {
+            return new MongoClient(mongoClientURI);
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException("Unknown mongodb host(s)", e);
         }
     }
     
-    private SimpleFeatureType retreiveFeatureTypeFromSchemaStore(String name) throws IOException {
-        File featureTypeFile = new File(schemaStoreURI.getPath(), name + ".json");
-        if (!featureTypeFile.canRead()) {
+    final DB createDB(MongoClient mongoClient, String databaseName, boolean databaseMustExist) {
+        if (databaseMustExist & !mongoClient.getDatabaseNames().contains(databaseName)) {
             return null;
         }
-        SimpleFeatureType featureType = null;
-        BufferedReader reader = new BufferedReader(new FileReader(featureTypeFile));
-        try {
-            String lineSeparator = System.getProperty("line.separator");
-            StringBuilder jsonBuilder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                jsonBuilder.append(line);
-                jsonBuilder.append(lineSeparator);
-            }
-            Object o = JSON.parse(jsonBuilder.toString());
-            if (o instanceof DBObject) {
-                SimpleFeatureTypeBuilder builder = FeatureTypeDBObject.convert((DBObject)o);
-                if (builder != null) {
-                    builder.setName(name(name));
-                    featureType = builder.buildFeatureType();
-                }
-            }
-        } finally {
-            reader.close();
-        }
-        return featureType;
+        return mongoClient.getDB(databaseName);
     }
     
-    private void storeFeatureTypeToSchemaStore(SimpleFeatureType type) throws IOException {
-        File featureTypeFile = new File(schemaStoreURI.getPath(), type.getTypeName() + ".json");
-        BufferedWriter writer = new BufferedWriter(new FileWriter(featureTypeFile));
-        try {
-            writer.write(JSON.serialize(FeatureTypeDBObject.convert(type)));
-        } finally {
-            writer.close();
+    private MongoSchemaStore createSchemaStore(String schemaStoreURI) {
+        if (schemaStoreURI.startsWith("file:")) {
+            try {
+                return new MongoSchemaFileStore(schemaStoreURI);
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException("Unable to create file-based schema store with URI \"" + schemaStoreURI + "\"", e);
+            }
+        } else if (schemaStoreURI.startsWith("mongodb://")) {
+            throw new UnsupportedOperationException("mongodb-based schema store not implemented yet.");
+        } else {
+            throw new IllegalArgumentException("Unsupported URI protocol for MongoDB schema store");
         }
     }
 
-    FilterCapabilities createFilterCapabilties() {
+    final FilterCapabilities createFilterCapabilties() {
         FilterCapabilities capabilities = new FilterCapabilities();
 
         capabilities.addAll(FilterCapabilities.LOGICAL_OPENGIS);
@@ -137,7 +129,7 @@ public class MongoDataStore extends ContentDataStore {
     }
 
     public DB getDb() {
-        return db;
+        return dataStoreDB;
     }
 
     public FilterCapabilities getFilterCapabilities() {
@@ -172,28 +164,28 @@ public class MongoDataStore extends ContentDataStore {
         for (AttributeDescriptor ad : incoming.getAttributeDescriptors()) {
             String adName = ad.getLocalName();
             if (gdName.equals(adName)) {
-                ad.getUserData().put("mapping", "geometry");
-                ad.getUserData().put("encoding", "GeoJSON");
+                ad.getUserData().put(KEY_mapping, "geometry");
+                ad.getUserData().put(KEY_encoding, "GeoJSON");
             } else {
-                ad.getUserData().put("mapping", "properties." + adName );
+                ad.getUserData().put(KEY_mapping, "properties." + adName );
             }
         }
         
         // Collection needs to exist so that it's returned with createTypeNames()
-        db.createCollection(incoming.getTypeName(), new BasicDBObject());
+        getDb().createCollection(incoming.getTypeName(), new BasicDBObject());
        
         // Store FeatureType instance since it can't be inferred (no documents)
         ContentEntry entry = entry (incoming.getName());
         ContentState state = entry.getState(null);
         state.setFeatureType(incoming);
         
-        storeFeatureTypeToSchemaStore(incoming);
+        schemaStore.storeSchema(incoming);
     }
 
     @Override
     protected List<Name> createTypeNames() throws IOException {
         List<Name> typeNames = new ArrayList();
-        for (String name : db.getCollectionNames()) {
+        for (String name : getDb().getCollectionNames()) {
             if (name.startsWith("system.")) {
                 continue;
             }
@@ -207,7 +199,7 @@ public class MongoDataStore extends ContentDataStore {
         ContentState state = entry.getState(null);
         SimpleFeatureType stateFeatureType = state.getFeatureType();
         if (stateFeatureType == null) {
-            stateFeatureType = retreiveFeatureTypeFromSchemaStore(entry.getTypeName());
+            stateFeatureType = schemaStore.retrieveSchema(entry.getName());
             if (stateFeatureType != null) {
                 state.setFeatureType(stateFeatureType);
             }
@@ -228,7 +220,7 @@ public class MongoDataStore extends ContentDataStore {
     protected ContentState createContentState(ContentEntry entry) {
         ContentState state = super.createContentState(entry);
         try {
-            SimpleFeatureType type = retreiveFeatureTypeFromSchemaStore(entry.getTypeName());
+            SimpleFeatureType type = schemaStore.retrieveSchema(entry.getName());
             if (type != null) {
                 state.setFeatureType(type);
             }
@@ -236,5 +228,11 @@ public class MongoDataStore extends ContentDataStore {
             Logger.getLogger(MongoDataStore.class.getName()).log(Level.SEVERE, null, ex);
         }
         return state;
+    }
+    
+    @Override
+    public void dispose() {
+        dataStoreClient.close();
+        super.dispose();
     }
 }
