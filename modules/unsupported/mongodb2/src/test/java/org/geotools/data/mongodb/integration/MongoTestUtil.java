@@ -13,7 +13,7 @@ import java.net.UnknownHostException;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.geotools.TestData;
-import org.geotools.data.mongodb.GeoJSONGeometryBuilder;
+import org.geotools.data.mongodb.MongoGeometryBuilder;
 import org.geotools.data.shapefile.ShapefileDataStore;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
@@ -80,7 +80,7 @@ public class MongoTestUtil {
   }
   
   public void loadFeatures(DBCollection coll, FeatureCollection<?,?> collection) {
-    GeoJSONGeometryBuilder gBuilder = new GeoJSONGeometryBuilder();
+    MongoGeometryBuilder gBuilder = new MongoGeometryBuilder();
     
     FeatureIterator<?> iterator = collection.features();
     while (iterator.hasNext()) {

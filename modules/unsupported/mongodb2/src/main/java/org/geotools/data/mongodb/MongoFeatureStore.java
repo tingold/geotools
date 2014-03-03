@@ -1,5 +1,6 @@
 package org.geotools.data.mongodb;
 
+import com.mongodb.DBCollection;
 import java.io.IOException;
 import org.geotools.data.FeatureReader;
 import org.geotools.data.FeatureWriter;
@@ -14,9 +15,9 @@ public class MongoFeatureStore extends ContentFeatureStore {
 
     MongoFeatureSource delegate;
 
-    public MongoFeatureStore(ContentEntry entry, Query query) {
+    public MongoFeatureStore(ContentEntry entry, Query query, DBCollection collection) {
         super(entry, query);
-        delegate = new MongoFeatureSource(entry, query);
+        delegate = new MongoFeatureSource(entry, query, collection);
     }
 
     @Override

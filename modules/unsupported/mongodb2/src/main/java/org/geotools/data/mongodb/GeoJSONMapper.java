@@ -4,13 +4,10 @@ package org.geotools.data.mongodb;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Geometry;
-import java.util.ArrayList;
-import java.util.List;
+import static org.geotools.data.mongodb.MongoDataStore.KEY_collection;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
-import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
-import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.Name;
 
 /**
@@ -19,9 +16,9 @@ import org.opengis.feature.type.Name;
  * @author Justin Deoliveira, OpenGeo
  *
  */
-public class GeoJSONMapper extends CollectionMapper {
+public class GeoJSONMapper extends AbstractCollectionMapper {
 
-    GeoJSONGeometryBuilder geomBuilder = new GeoJSONGeometryBuilder();
+    MongoGeometryBuilder geomBuilder = new MongoGeometryBuilder();
 
     @Override
     public String getGeometryPath() {
@@ -51,12 +48,12 @@ public class GeoJSONMapper extends CollectionMapper {
     @Override
     public SimpleFeatureType buildFeatureType(Name name, DBCollection collection) {
         
-        SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
+        SimpleFeatureTypeBuilder ftBuilder = new SimpleFeatureTypeBuilder();
         
-        tb.setName(name);
-        tb.userData("mapping", "geometry");
-        tb.userData("encoding", "GeoJSON");
-        tb.add("geometry", Geometry.class, DefaultGeographicCRS.WGS84);
+        ftBuilder.setName(name);
+        ftBuilder.userData(MongoDataStore.KEY_mapping, "geometry");
+        ftBuilder.userData(MongoDataStore.KEY_encoding, "GeoJSON");
+        ftBuilder.add("geometry", Geometry.class, DefaultGeographicCRS.WGS84);
         
         DBObject rootDBO = collection.findOne();
         if (rootDBO != null && rootDBO.containsField("properties")) {
@@ -65,32 +62,18 @@ public class GeoJSONMapper extends CollectionMapper {
               Object v = propertiesDBO.get(key);
               Class<?> binding = MongoUtil.mapBSONObjectToJavaType(v);
               if (binding != null) {
-                  tb.userData("mapping", "properties." + key);
-                  tb.add(key, binding);
+                  ftBuilder.userData(MongoDataStore.KEY_mapping, "properties." + key);
+                  ftBuilder.add(key, binding);
               } else {
-                System.err.println("unmapped key, " + key + " with type of " + v.getClass().getCanonicalName());
+                System.err.println("unmapped key, " + key + " with type of " + v.getClass().getName());
               }
           }
         }
-        return tb.buildFeatureType();
+        SimpleFeatureType ft = ftBuilder.buildFeatureType();
+        // pre-populating this makes view creation easier...
+        ft.getUserData().put(KEY_collection, ft.getTypeName());
+        
+        return ft;
     }
     
-    @Override
-    public SimpleFeature buildFeature(DBObject rootDBO, SimpleFeatureType featureType) {
-      
-        String gdLocalName = featureType.getGeometryDescriptor().getLocalName();
-        List<AttributeDescriptor> adList = featureType.getAttributeDescriptors();
-        
-        List values = new ArrayList(adList.size());      
-        for (AttributeDescriptor descriptor : adList) {
-          String adLocalName = descriptor.getLocalName();
-          if (gdLocalName.equals(adLocalName)) {
-            values.add(getGeometry(rootDBO));
-          } else {
-            values.add(MongoUtil.getDBOValue(rootDBO, (String)descriptor.getUserData().get(MongoDataStore.KEY_mapping)));
-          }
-        }
-        
-        return new MongoFeature(values.toArray(), featureType, rootDBO.get("_id").toString());
-    }
 }

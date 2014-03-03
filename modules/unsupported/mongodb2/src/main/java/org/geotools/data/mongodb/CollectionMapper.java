@@ -13,19 +13,19 @@ import org.opengis.feature.type.Name;
  * @author Justin Deoliveira, OpenGeo
  *
  */
-public abstract class CollectionMapper {
+public interface CollectionMapper {
 
-    public abstract Geometry getGeometry(DBObject obj);
+    Geometry getGeometry(DBObject obj);
 
-    public abstract void setGeometry(DBObject obj, Geometry g);
+    void setGeometry(DBObject obj, Geometry g);
 
-    public abstract DBObject toObject(Geometry g);
+    DBObject toObject(Geometry g);
     
-    public abstract String getGeometryPath();
+    String getGeometryPath();
 
-    public abstract String getPropertyPath(String property);
+    String getPropertyPath(String property);
 
-    public abstract SimpleFeatureType buildFeatureType(Name name, DBCollection collection);
+    SimpleFeatureType buildFeatureType(Name name, DBCollection collection);
 
-    public abstract SimpleFeature buildFeature(DBObject obj, SimpleFeatureType featureType);
+    SimpleFeature buildFeature(DBObject obj, SimpleFeatureType featureType);
 }

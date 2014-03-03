@@ -1,13 +1,8 @@
 package org.geotools.data.mongodb;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
-import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 
 import com.mongodb.BasicDBList;
@@ -18,7 +13,7 @@ import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import org.opengis.feature.type.Name;
 
-public class AddHocMapper extends CollectionMapper {
+public class AddHocMapper extends AbstractCollectionMapper {
 
     String[] geometryPath;
     GeometryFactory geometryFactory;
@@ -82,7 +77,7 @@ public class AddHocMapper extends CollectionMapper {
 
     @Override
     public DBObject toObject(Geometry g) {
-        GeoJSONGeometryBuilder b = new GeoJSONGeometryBuilder();
+        MongoGeometryBuilder b = new MongoGeometryBuilder();
         DBObject obj = b.toObject(g);
         return (DBObject) obj.get("coordinates");
     }
@@ -98,47 +93,6 @@ public class AddHocMapper extends CollectionMapper {
         tb.setName(name);
         tb.add(getGeometryPath(), Geometry.class);
         return tb.buildFeatureType();
-    }
-
-    @Override
-    public SimpleFeature buildFeature(DBObject obj, SimpleFeatureType featureType) {
-        //read the geometry
-        Object o = obj;
-        for (String p : geometryPath) {
-            o = ((DBObject) o).get(p);
-            if (o == null || !(o instanceof DBObject)) {
-                break;
-            }
-        }
-
-        if (o == null) {
-            throw new IllegalArgumentException("Could not resolve geometry path: " + 
-                getGeometryPath() + " for object with id: " + obj.get("_id"));
-        }
-
-        List<Object> values = new ArrayList<Object>(obj.keySet().size());
-        Map<String,Integer> lookup = new HashMap<String, Integer>();
-
-        values.add(getGeometry((DBObject)o));
-        lookup.put(getGeometryPath(), 0);
-
-        int i = 1;
-        for (String key : obj.keySet()) {
-            if (key.equals("_id")) {
-                continue;
-            }
-            if (key.equals(geometryPath[0])) {
-                //geometry, ignore
-                continue;
-            }
-            
-            values.add(obj.get(key));
-            lookup.put(key, i++);
-        }
-
-        String id = obj.get("_id").toString();
-//        return new MongoFeature(values, featureType, id, lookup);
-        return null;
     }
 
 //

@@ -30,39 +30,44 @@ public class MongoFeatureSource extends ContentFeatureSource {
 
     static Logger LOG = Logging.getLogger("org.geotools.data.mongodb");
 
-    DBCollection collection;
+    final DBCollection collection;
     CollectionMapper  mapper;
 
-    public MongoFeatureSource(ContentEntry entry, Query query) {
+    public MongoFeatureSource(ContentEntry entry, Query query, DBCollection collection) {
         super(entry, query);
-        collection = getDataStore().getDb().getCollection(entry.getTypeName());
+        this.collection = collection;
         initMapper();
     }
 
-    void initMapper() {
-        CollectionMapper mapper = getDataStore().getDefaultMapper();
-
-        //snif the first object to determine what type it is
-        if (collection.count() > 0) {
-            DBObject obj = collection.findOne();
-            if (obj.containsField("geometry") && obj.containsField("properties")) {
-                mapper = new GeoJSONMapper();
-            }
-            else {
-                //add hoc, try to figure out from values if one is the geometry
-                List<String> candidates = new ArrayList();
-                for (String key : obj.keySet()) {
-                    Object val = obj.get(key);
-                    if (val instanceof List) {
-                        candidates.add(key);
+    final void initMapper() {
+     
+        // use schema with mapping info if it exists
+        SimpleFeatureType schema = entry.getState(null).getFeatureType();
+        if (schema != null) {
+            setMapper(new MongoSchemaMapper(schema));
+        } else {
+            //snif the first object to determine what type it is
+            if (collection.count() > 0) {
+                DBObject obj = collection.findOne();
+                if (obj.containsField("geometry") && obj.containsField("properties")) {
+                    mapper = new GeoJSONMapper();
+                }
+                else {
+                    //add hoc, try to figure out from values if one is the geometry
+                    List<String> candidates = new ArrayList();
+                    for (String key : obj.keySet()) {
+                        Object val = obj.get(key);
+                        if (val instanceof List) {
+                            candidates.add(key);
+                        }
+                    }
+                    if (candidates.size() == 1) {
+                        mapper = new AddHocMapper(candidates.get(0));
                     }
                 }
-                if (candidates.size() == 1) {
-                    mapper = new AddHocMapper(candidates.get(0));
-                }
             }
+            setMapper(mapper);
         }
-        setMapper(mapper);
     }
 
     public DBCollection getCollection() {
@@ -79,7 +84,9 @@ public class MongoFeatureSource extends ContentFeatureSource {
 
     @Override
     protected SimpleFeatureType buildFeatureType() throws IOException {
-       return mapper.buildFeatureType(entry.getName(), collection);
+       SimpleFeatureType schema = mapper.buildFeatureType(entry.getName(), collection);
+       getDataStore().getSchemaStore().storeSchema(schema);
+       return schema;
     }
 
     @Override

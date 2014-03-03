@@ -21,18 +21,24 @@ import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.Polygon;
 
-public class GeoJSONGeometryBuilder {
+public class MongoGeometryBuilder {
 
-    GeometryFactory geomFactory;
+    GeometryFactory geometryFactory;
     
+    // MongoDB 2.4 doesn't support the multi-geometry
+    // GeoJSON types.  A lot of multi-geometry instances encode
+    // a single geometry.  This flag will allow the conversion
+    // of JTS multi-geometry types encoding a single geometry
+    // to their single geometry analog. This should ease some of 
+    // the pain...
     boolean opportunisticMultiGeometryCoversion = true;
 
-    public GeoJSONGeometryBuilder() {
+    public MongoGeometryBuilder() {
         this(new GeometryFactory());
     }
 
-    public GeoJSONGeometryBuilder(GeometryFactory geomFactory) {
-        this.geomFactory = geomFactory;
+    public MongoGeometryBuilder(GeometryFactory geomFactory) {
+        this.geometryFactory = geomFactory;
     }
 
     public Geometry toGeometry(DBObject obj) {
@@ -94,7 +100,7 @@ public class GeoJSONGeometryBuilder {
         for (Object o : obj) {
             geoms.add(toGeometry(obj));
         }
-        return geomFactory.createGeometryCollection(geoms.toArray(new Geometry[geoms.size()]));
+        return geometryFactory.createGeometryCollection(geoms.toArray(new Geometry[geoms.size()]));
     }
 
     public DBObject toObject(GeometryCollection gc) {
@@ -106,7 +112,7 @@ public class GeoJSONGeometryBuilder {
         for (Object o : list) {
             polys.add(toPolygon((List)o));
         }
-        return geomFactory.createMultiPolygon(polys.toArray(new Polygon[polys.size()]));
+        return geometryFactory.createMultiPolygon(polys.toArray(new Polygon[polys.size()]));
     }
 
     public DBObject toObject(MultiPolygon mp) {
@@ -128,7 +134,7 @@ public class GeoJSONGeometryBuilder {
         for (Object o : list) {
             lines.add(toLineString((List)o));
         }
-        return geomFactory.createMultiLineString(lines.toArray(new LineString[lines.size()]));
+        return geometryFactory.createMultiLineString(lines.toArray(new LineString[lines.size()]));
     }
 
     public DBObject toObject(MultiLineString ml) {
@@ -150,7 +156,7 @@ public class GeoJSONGeometryBuilder {
         for (Object o : list) {
             points.add(toPoint((List)o));
         }
-        return geomFactory.createMultiPoint(points.toArray(new Point[points.size()]));
+        return geometryFactory.createMultiPoint(points.toArray(new Point[points.size()]));
     }
 
     public DBObject toObject(MultiPoint mp) {
@@ -169,7 +175,7 @@ public class GeoJSONGeometryBuilder {
         for (int i = 1; i < list.size(); i++) {
             inner.add((LinearRing) toLineString((List)list.get(i)));
         }
-        return geomFactory.createPolygon(outer, inner.toArray(new LinearRing[inner.size()]));
+        return geometryFactory.createPolygon(outer, inner.toArray(new LinearRing[inner.size()]));
     }
 
     public DBObject toObject(Polygon p) {
@@ -187,9 +193,9 @@ public class GeoJSONGeometryBuilder {
 
         Coordinate[] coords = coordList.toArray(new Coordinate[coordList.size()]);
         if (coords.length > 3 && coords[0].equals(coords[coords.length-1])) {
-            return geomFactory.createLinearRing(coords);
+            return geometryFactory.createLinearRing(coords);
         }
-        return geomFactory.createLineString(coords);
+        return geometryFactory.createLineString(coords);
     }
 
     public DBObject toObject(LineString l) {
@@ -200,7 +206,7 @@ public class GeoJSONGeometryBuilder {
     }
 
     public Point toPoint(List list) {
-        return geomFactory.createPoint(toCoordinate(list));
+        return geometryFactory.createPoint(toCoordinate(list));
     }
 
     public DBObject toObject(Point p) {

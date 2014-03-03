@@ -8,7 +8,6 @@ import com.mongodb.DBObject;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
-import org.bson.types.BSONTimestamp;
 
 /**
  *
@@ -74,8 +73,6 @@ public class MongoUtil {
             o instanceof Boolean || 
             o instanceof Date) {
             return o.getClass();
-        } else if (o instanceof BSONTimestamp) {
-            return Date.class;
         }
         return null;
     } 

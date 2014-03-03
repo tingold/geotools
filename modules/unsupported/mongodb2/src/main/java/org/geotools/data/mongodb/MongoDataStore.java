@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.geotools.data.FeatureWriter;
@@ -43,13 +45,13 @@ public class MongoDataStore extends ContentDataStore {
     final DB dataStoreDB;
     
     FilterCapabilities filterCapabilities;
-    CollectionMapper defaultMapper;
     
     public MongoDataStore(String dataStoreURI) {
         this(dataStoreURI, null);
     }
     
     public MongoDataStore(String dataStoreURI, String schemaStoreURI) {
+        
         MongoClientURI dataStoreClientURI = createMongoClientURI(dataStoreURI);
         dataStoreClient = createMongoClient(dataStoreClientURI);
         dataStoreDB = createDB(dataStoreClient, dataStoreClientURI.getDatabase(), true);
@@ -61,7 +63,6 @@ public class MongoDataStore extends ContentDataStore {
         schemaStore = createSchemaStore(schemaStoreURI);
         
         filterCapabilities = createFilterCapabilties();
-        defaultMapper = new GeoJSONMapper();
     }
     
     final MongoClientURI createMongoClientURI(String dataStoreURI) {
@@ -128,20 +129,8 @@ public class MongoDataStore extends ContentDataStore {
         return capabilities;
     }
 
-    public DB getDb() {
-        return dataStoreDB;
-    }
-
     public FilterCapabilities getFilterCapabilities() {
         return filterCapabilities;
-    }
-
-    public CollectionMapper getDefaultMapper() {
-        return defaultMapper;
-    }
-
-    public void setDefaultMapper(CollectionMapper defaultMapper) {
-        this.defaultMapper = defaultMapper;
     }
 
     @Override
@@ -170,9 +159,11 @@ public class MongoDataStore extends ContentDataStore {
                 ad.getUserData().put(KEY_mapping, "properties." + adName );
             }
         }
+        // pre-populating this makes view creation easier...
+        incoming.getUserData().put(KEY_collection, incoming.getTypeName());
         
         // Collection needs to exist so that it's returned with createTypeNames()
-        getDb().createCollection(incoming.getTypeName(), new BasicDBObject());
+        dataStoreDB.createCollection(incoming.getTypeName(), new BasicDBObject());
        
         // Store FeatureType instance since it can't be inferred (no documents)
         ContentEntry entry = entry (incoming.getName());
@@ -184,27 +175,38 @@ public class MongoDataStore extends ContentDataStore {
 
     @Override
     protected List<Name> createTypeNames() throws IOException {
-        List<Name> typeNames = new ArrayList();
-        for (String name : getDb().getCollectionNames()) {
+        Set<String> typeNameSet = new LinkedHashSet(getSchemaStore().typeNames());
+        for (String name : dataStoreDB.getCollectionNames()) {
             if (name.startsWith("system.")) {
                 continue;
             }
-            typeNames.add(name(name));
+            typeNameSet.add(name);
         }
-        return typeNames;
+        List<Name> typeNameList = new ArrayList<Name>();
+        for (String name : typeNameSet) {
+            typeNameList.add(name(name));
+        }
+        return typeNameList;
     }
 
     @Override
     protected ContentFeatureSource createFeatureSource(ContentEntry entry) throws IOException {
         ContentState state = entry.getState(null);
-        SimpleFeatureType stateFeatureType = state.getFeatureType();
-        if (stateFeatureType == null) {
-            stateFeatureType = schemaStore.retrieveSchema(entry.getName());
-            if (stateFeatureType != null) {
-                state.setFeatureType(stateFeatureType);
+        String collection = entry.getTypeName();
+        SimpleFeatureType schema = state.getFeatureType();
+        if (schema == null) {
+            schema = schemaStore.retrieveSchema(entry.getName());
+            if (schema != null) {
+                state.setFeatureType(schema);
             }
         }
-        return new MongoFeatureStore(entry, null);
+        if (schema != null) {
+            String collectionFromSchema = (String)schema.getUserData().get(KEY_collection);
+            if (collectionFromSchema != null) {
+                collection = collectionFromSchema;
+            }
+        }
+        return new MongoFeatureStore(entry, null, dataStoreDB.getCollection(collection));
     }
 
     @Override
@@ -228,6 +230,10 @@ public class MongoDataStore extends ContentDataStore {
             Logger.getLogger(MongoDataStore.class.getName()).log(Level.SEVERE, null, ex);
         }
         return state;
+    }
+
+    final MongoSchemaStore getSchemaStore() {
+        return schemaStore;
     }
     
     @Override

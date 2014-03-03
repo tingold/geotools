@@ -36,6 +36,7 @@ public class MongoSchemaFileStore implements MongoSchemaStore {
     
     public MongoSchemaFileStore(URI uri) {
         schemaStoreFile = new File(uri);
+        schemaStoreFile.mkdirs();
     }
     
     @Override

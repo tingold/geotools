@@ -1,19 +1,17 @@
 package org.geotools.data.mongodb.geojson;
 
-import org.geotools.data.mongodb.GeoJSONMapper;
-import org.geotools.data.mongodb.MongoDataStore;
-import org.geotools.data.mongodb.MongoTestSetup;
-
 import com.mongodb.BasicDBObject;
 import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
+import org.geotools.data.mongodb.MongoDataStore;
+import org.geotools.data.mongodb.MongoTestSetup;
 
 public class GeoJSONMongoTestSetup extends MongoTestSetup {
 
     @Override
     protected void setUpDataStore(MongoDataStore dataStore) {
-        dataStore.setDefaultMapper(new GeoJSONMapper());
+
     }
 
     @Override
