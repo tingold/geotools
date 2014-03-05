@@ -87,9 +87,9 @@ public class FeatureTypeDBObjectTest {
         assertTrue("CRS are equal", CRS.equalsIgnoreMetadata(result.getCoordinateReferenceSystem(), original.getCoordinateReferenceSystem()));
         
         // NOTE!  Geometry type is generalized when persisted...  This 2 asserts are here for documentation only
-        assertThat((Class)result.getGeometryDescriptor().getType().getBinding(),
-                is(not(equalTo(original.getGeometryDescriptor().getType().getBinding()))));
-        assertThat((Class)result.getGeometryDescriptor().getType().getBinding(), is(equalTo(Geometry.class)));
+        assertThat(result.getGeometryDescriptor().getType().getBinding().getName(),
+                is(not(equalTo(original.getGeometryDescriptor().getType().getBinding().getName()))));
+        assertThat(result.getGeometryDescriptor().getType().getBinding().getName(), is(equalTo(Geometry.class.getName())));
         
         for (AttributeDescriptor rad: result.getAttributeDescriptors()) {
             String radName = rad.getLocalName();
@@ -98,7 +98,7 @@ public class FeatureTypeDBObjectTest {
             assertThat(rad.getMaxOccurs(), is(equalTo(oad.getMaxOccurs())));
             assertThat(rad.getDefaultValue(), is(equalTo(oad.getDefaultValue())));
             if (!radName.equals(rgdName)) {
-                assertThat((Class)rad.getType().getBinding(), is(equalTo(oad.getType().getBinding())));
+                assertThat(rad.getType().getBinding().getSimpleName(), is(equalTo(oad.getType().getBinding().getSimpleName())));
             }
             Map<?,?> radUserData = rad.getUserData();
             Map<?,?> oadUserData = oad.getUserData();
