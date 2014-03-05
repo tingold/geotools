@@ -56,7 +56,7 @@ public class MongoDataStore extends ContentDataStore {
         
         MongoClientURI dataStoreClientURI = createMongoClientURI(dataStoreURI);
         dataStoreClient = createMongoClient(dataStoreClientURI);
-        dataStoreDB = createDB(dataStoreClient, dataStoreClientURI.getDatabase(), true);
+        dataStoreDB = createDB(dataStoreClient, dataStoreClientURI.getDatabase(), false);
         if (dataStoreDB == null) {
             dataStoreClient.close(); // This smells bad...
             throw new IllegalArgumentException("Unknown mongodb database, \"" + dataStoreClientURI.getDatabase() + "\"");
