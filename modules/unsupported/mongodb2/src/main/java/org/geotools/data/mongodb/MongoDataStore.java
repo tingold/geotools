@@ -86,7 +86,7 @@ public class MongoDataStore extends ContentDataStore {
     }
     
     final DB createDB(MongoClient mongoClient, String databaseName, boolean databaseMustExist) {
-        if (databaseMustExist & !mongoClient.getDatabaseNames().contains(databaseName)) {
+        if (databaseMustExist && !mongoClient.getDatabaseNames().contains(databaseName)) {
             return null;
         }
         return mongoClient.getDB(databaseName);
