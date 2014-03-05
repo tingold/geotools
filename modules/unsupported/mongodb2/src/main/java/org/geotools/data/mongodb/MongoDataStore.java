@@ -8,11 +8,12 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.geotools.data.FeatureWriter;
 import org.geotools.data.Transaction;
 import org.geotools.data.store.ContentDataStore;
@@ -185,40 +186,96 @@ public class MongoDataStore extends ContentDataStore {
         schemaStore.storeSchema(incoming);
     }
 
+    private String collectionNameFromType(SimpleFeatureType type) {
+        String collectionName = (String)type.getUserData().get(KEY_collection);
+        return collectionName != null ? collectionName : type.getTypeName();
+    }
+    
     @Override
     protected List<Name> createTypeNames() throws IOException {
-        Set<String> typeNameSet = new LinkedHashSet(getSchemaStore().typeNames());
-        for (String name : dataStoreDB.getCollectionNames()) {
-            if (name.startsWith("system.")) {
-                continue;
+        
+        Set<String> collectionNames = new LinkedHashSet<String>(dataStoreDB.getCollectionNames());
+        Set<String> typeNameSet = new LinkedHashSet();
+        
+        for (String candidateTypeName : getSchemaStore().typeNames()) {
+            try {
+                SimpleFeatureType candidateSchema = getSchemaStore().retrieveSchema(name(candidateTypeName));
+                
+                // extract collection that schema maps to either from user data attribute
+                // or, if that's missing, the schema type name. 
+                String candidateCollectionName = collectionNameFromType(candidateSchema);
+                
+                // verify collection exists in db and has geometry index
+                if (collectionNames.contains(candidateCollectionName)) {
+                    // verify geometry exists and has mapping.
+                    String geometryName = candidateSchema.getGeometryDescriptor().getLocalName();
+                    String geometryMapping = (String)candidateSchema.getDescriptor(geometryName).getUserData().get(KEY_mapping);
+                    if (geometryMapping != null) {
+                        Set<String> geometryIndices =  MongoUtil.findIndexedGeometries(
+                                dataStoreDB.getCollection(candidateCollectionName));
+                        // verify geometry mapping is indexed...
+                        if (geometryIndices.contains(geometryMapping)) {
+                            typeNameSet.add(candidateTypeName);
+                        } else {
+                            LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", the geometry attribute, \"{1}\", is mapped to document key \"{2}\" but it is not spatialy indexed in collection {3}.{4}",
+                                    new Object[] { name(candidateTypeName), geometryName, geometryMapping, dataStoreDB.getName(), candidateCollectionName});
+                        }
+                    } else {
+                        LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", the geometry attribute \"{1}\" is not mapped to a document key",
+                                new Object[] { name(candidateTypeName), geometryName});
+                    }
+                } else {
+                    LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", the collection it maps \"{1}.{2}\" does not exist",
+                                new Object[] { name(candidateTypeName), dataStoreDB.getName(), candidateCollectionName});
+                }
+            } catch (IOException e) {
+                LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", an exception was thrown while attempting to retrieve the schema: {1}",
+                                new Object[] { name(candidateTypeName), e});
             }
-            typeNameSet.add(name);
         }
+        
+        // Create set of collections w/o named schema
+        Collection<String> collectionsToCheck = new LinkedList<String>(collectionNames);
+        collectionsToCheck.removeAll(typeNameSet);
+        
+        // Check collection set to see if we can use any of them
+        for(String collectionName : collectionsToCheck) {
+            // make sure it's not system collection
+            if (!collectionName.startsWith("system.")) {
+                Set<String> geometryIndexSet = MongoUtil.findIndexedGeometries(
+                        dataStoreDB.getCollection(collectionName));
+                // verify collection has an indexed geometry property
+                if(!geometryIndexSet.isEmpty()) {
+                    typeNameSet.add(collectionName);
+                } else {
+                    LOGGER.log(Level.INFO, "Ignoring collection \"{0}.{1}\", unable to find key with spatial index", 
+                            new Object[] { dataStoreDB.getName(), collectionName });
+                }
+            }
+        }
+        
         List<Name> typeNameList = new ArrayList<Name>();
         for (String name : typeNameSet) {
             typeNameList.add(name(name));
         }
+        
         return typeNameList;
     }
 
     @Override
     protected ContentFeatureSource createFeatureSource(ContentEntry entry) throws IOException {
         ContentState state = entry.getState(null);
-        String collection = entry.getTypeName();
-        SimpleFeatureType schema = state.getFeatureType();
-        if (schema == null) {
-            schema = schemaStore.retrieveSchema(entry.getName());
-            if (schema != null) {
-                state.setFeatureType(schema);
+        SimpleFeatureType type = state.getFeatureType();
+        if (type == null) {
+            type = schemaStore.retrieveSchema(entry.getName());
+            if (type != null) {
+                state.setFeatureType(type);
             }
         }
-        if (schema != null) {
-            String collectionFromSchema = (String)schema.getUserData().get(KEY_collection);
-            if (collectionFromSchema != null) {
-                collection = collectionFromSchema;
-            }
-        }
-        return new MongoFeatureStore(entry, null, dataStoreDB.getCollection(collection));
+        String collectionName = type != null ?
+                collectionNameFromType(type) :
+                entry.getTypeName();
+        return new MongoFeatureStore(entry, null, dataStoreDB.getCollection(collectionName));
     }
 
     @Override
@@ -238,8 +295,9 @@ public class MongoDataStore extends ContentDataStore {
             if (type != null) {
                 state.setFeatureType(type);
             }
-        } catch (IOException ex) {
-            Logger.getLogger(MongoDataStore.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Exception thrown while attempting to retrieve the schema for {0}: {1}",
+                                new Object[] {entry.getName(), e});
         }
         return state;
     }

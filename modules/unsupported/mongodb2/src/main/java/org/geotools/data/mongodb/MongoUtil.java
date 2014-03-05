@@ -4,10 +4,15 @@
 package org.geotools.data.mongodb;
 
 import com.mongodb.BasicDBObject;
+import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  *
@@ -60,11 +65,26 @@ public class MongoUtil {
         }
     }
     
-    /**
-     *  For attribute type binding... 
-     * @param o
-     * @return binding to be use for attribute type
-     */
+    public static Set<String> findIndexedGeometries(DBCollection dbc) {
+        return findIndexedProperties(dbc, "2dsphere");
+    } 
+    
+    public static Set<String> findIndexedProperties(DBCollection dbc, String type) {
+        Set<String> properties = new LinkedHashSet<String>();
+        List<DBObject> indices = dbc.getIndexInfo();
+        for (DBObject index : indices) {
+            Object key = index.get("key");
+            if (key instanceof DBObject) {
+                for (Map.Entry entry : ((Map<?,?>)((DBObject)key).toMap()).entrySet()) {
+                    if (type == null || type.equals(entry.getValue())) {
+                        properties.add(entry.getKey().toString());
+                    }
+                }
+            }
+        }        
+        return properties;
+    }
+    
     public static Class<?> mapBSONObjectToJavaType(Object o) {
         if (o instanceof String || 
             o instanceof Double ||
