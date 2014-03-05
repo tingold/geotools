@@ -27,7 +27,9 @@ import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.Name;
+import org.opengis.filter.And;
 import org.opengis.filter.Filter;
+import org.opengis.filter.Not;
 import org.opengis.filter.PropertyIsBetween;
 import org.opengis.filter.PropertyIsNull;
 import org.opengis.filter.spatial.BBOX;
@@ -107,7 +109,10 @@ public class MongoDataStore extends ContentDataStore {
     final FilterCapabilities createFilterCapabilties() {
         FilterCapabilities capabilities = new FilterCapabilities();
 
-        capabilities.addAll(FilterCapabilities.LOGICAL_OPENGIS);
+//        capabilities.addAll(FilterCapabilities.LOGICAL_OPENGIS);
+        capabilities.addType(And.class);
+        capabilities.addType(Not.class);
+        
         capabilities.addAll(FilterCapabilities.SIMPLE_COMPARISONS_OPENGIS);
         capabilities.addType(PropertyIsNull.class);
         capabilities.addType(PropertyIsBetween.class);
