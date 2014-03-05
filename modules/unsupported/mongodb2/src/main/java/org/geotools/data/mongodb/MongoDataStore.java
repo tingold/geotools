@@ -53,10 +53,14 @@ public class MongoDataStore extends ContentDataStore {
     }
     
     public MongoDataStore(String dataStoreURI, String schemaStoreURI) {
-        
+        this(dataStoreURI, schemaStoreURI, true);
+    }
+    
+    public MongoDataStore(String dataStoreURI, String schemaStoreURI, boolean createDatabaseIfNeeded) {
+                
         MongoClientURI dataStoreClientURI = createMongoClientURI(dataStoreURI);
         dataStoreClient = createMongoClient(dataStoreClientURI);
-        dataStoreDB = createDB(dataStoreClient, dataStoreClientURI.getDatabase(), false);
+        dataStoreDB = createDB(dataStoreClient, dataStoreClientURI.getDatabase(), !createDatabaseIfNeeded);
         if (dataStoreDB == null) {
             dataStoreClient.close(); // This smells bad...
             throw new IllegalArgumentException("Unknown mongodb database, \"" + dataStoreClientURI.getDatabase() + "\"");
