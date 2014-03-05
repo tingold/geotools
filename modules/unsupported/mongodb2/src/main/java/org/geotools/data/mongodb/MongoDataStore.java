@@ -145,6 +145,8 @@ public class MongoDataStore extends ContentDataStore {
     @Override
     public void createSchema(SimpleFeatureType incoming) throws IOException {
 
+        final String geometryMapping = "geometry";
+        
         CoordinateReferenceSystem incomingCRS = incoming.getCoordinateReferenceSystem();
         if (incomingCRS == null) {
             incoming.getGeometryDescriptor().getCoordinateReferenceSystem();
@@ -162,7 +164,7 @@ public class MongoDataStore extends ContentDataStore {
         for (AttributeDescriptor ad : incoming.getAttributeDescriptors()) {
             String adName = ad.getLocalName();
             if (gdName.equals(adName)) {
-                ad.getUserData().put(KEY_mapping, "geometry");
+                ad.getUserData().put(KEY_mapping, geometryMapping);
                 ad.getUserData().put(KEY_encoding, "GeoJSON");
             } else {
                 ad.getUserData().put(KEY_mapping, "properties." + adName );
@@ -171,8 +173,9 @@ public class MongoDataStore extends ContentDataStore {
         // pre-populating this makes view creation easier...
         incoming.getUserData().put(KEY_collection, incoming.getTypeName());
         
-        // Collection needs to exist so that it's returned with createTypeNames()
-        dataStoreDB.createCollection(incoming.getTypeName(), new BasicDBObject());
+        // Collection needs to exist (with index) so that it's returned with createTypeNames()
+        dataStoreDB.createCollection(incoming.getTypeName(), new BasicDBObject())
+                .ensureIndex(new BasicDBObject(geometryMapping, "2dsphere"));
        
         // Store FeatureType instance since it can't be inferred (no documents)
         ContentEntry entry = entry (incoming.getName());
