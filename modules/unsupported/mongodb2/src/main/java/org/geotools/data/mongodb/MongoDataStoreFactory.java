@@ -8,8 +8,8 @@ import org.geotools.data.DataStore;
 
 public class MongoDataStoreFactory extends AbstractDataStoreFactory {
 
-    public static final Param DATASTORE_URI = new Param("data_store", String.class, "MongoDB URI", true, "mongodb://localhost/<db>");
-    public static final Param SCHEMASTORE_URI = new Param("schema_store", String.class, "Schema Store URI", true);
+    public static final Param DATASTORE_URI = new Param("data_store", String.class, "MongoDB URI", true, "mongodb://localhost/<database name>");
+    public static final Param SCHEMASTORE_URI = new Param("schema_store", String.class, "Schema Store URI", true, "file://<absolute path>");
     
     @Override
     public String getDisplayName() {
