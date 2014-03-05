@@ -14,6 +14,7 @@ import org.geotools.filter.identity.FeatureIdImpl;
 import org.geotools.geometry.jts.JTS;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
+import org.geotools.util.Converters;
 import org.opengis.feature.GeometryAttribute;
 import org.opengis.feature.Property;
 import org.opengis.feature.simple.SimpleFeature;
@@ -88,8 +89,7 @@ public class MongoDBObjectFeature implements SimpleFeature {
 
     @Override
     public void setDefaultGeometry(Object geometry) {
-        geometry = convertToDBOValue(geometry);
-        MongoUtil.setDBOValue(featureDBO, mapper.getGeometryPath(), geometry);
+        MongoUtil.setDBOValue(featureDBO, mapper.getGeometryPath(), mapper.toObject((Geometry)geometry));
     }
 
     @Override
@@ -133,11 +133,14 @@ public class MongoDBObjectFeature implements SimpleFeature {
     }
 
     private void doSetAttribute(AttributeDescriptor d, Object o) {
-        o = convertToDBOValue(o);
         if (d instanceof GeometryDescriptor) {
-            MongoUtil.setDBOValue(featureDBO, mapper.getGeometryPath(), o);
+            MongoUtil.setDBOValue(featureDBO,
+                    mapper.getGeometryPath(),
+                    mapper.toObject((Geometry)o));
         } else {
-            MongoUtil.setDBOValue(featureDBO, mapper.getPropertyPath(d.getLocalName()), o);
+            MongoUtil.setDBOValue(featureDBO,
+                    mapper.getPropertyPath(d.getLocalName()),
+                    Converters.convert(o, d.getType().getBinding()));
         }
     }
     
@@ -145,13 +148,6 @@ public class MongoDBObjectFeature implements SimpleFeature {
         return MongoUtil.getDBOValue(featureDBO, path);
     }
     
-    Object convertToDBOValue(Object o) {
-        if (o instanceof Geometry) {
-            o =  mapper.toObject((Geometry)o);
-        }
-        return o;
-    }
-
     @Override
     public int getAttributeCount() {
         return featureType.getAttributeCount();
