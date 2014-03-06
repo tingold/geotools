@@ -7,8 +7,10 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -66,10 +68,14 @@ public class MongoUtil {
     }
     
     public static Set<String> findIndexedGeometries(DBCollection dbc) {
-        return findIndexedProperties(dbc, "2dsphere");
+        return findIndexedFields(dbc, "2dsphere");
     } 
     
-    public static Set<String> findIndexedProperties(DBCollection dbc, String type) {
+    public static Set<String> findIndexedFields(DBCollection dbc) {
+        return findIndexedFields(dbc, null);
+    }
+    
+    public static Set<String> findIndexedFields(DBCollection dbc, String type) {
         Set<String> properties = new LinkedHashSet<String>();
         List<DBObject> indices = dbc.getIndexInfo();
         for (DBObject index : indices) {
@@ -83,6 +89,46 @@ public class MongoUtil {
             }
         }        
         return properties;
+    }
+    
+    public static Map<String, Class<?>> findMappableFields(DBCollection dbc) {
+        return findMappableProperties(dbc.findOne());
+    }
+    
+    public static Map<String, Class<?>> findMappableProperties(DBObject dbo) {
+        if (dbo == null) {
+            return  Collections.EMPTY_MAP;
+        }
+        Map<String, Class<?>> map = doFindMappableProperties(dbo);
+        map.remove("_id");
+        return map;
+    }
+    
+    private static Map<String, Class<?>> doFindMappableProperties(DBObject dbo) {
+        if (dbo == null) {
+            return Collections.EMPTY_MAP;
+        }
+        Map<String, Class<?>> map = new LinkedHashMap<String, Class<?>>();
+        for (Map.Entry e : ((Map<?,?>)dbo.toMap()).entrySet()) {
+            Object k = e.getKey();
+            if (k instanceof String) {
+                String key = (String)k;
+                Object v = e.getValue();
+                if (v instanceof DBObject) {
+                    for (Map.Entry<String, Class<?>> childEntry : doFindMappableProperties((DBObject)v).entrySet()) {
+                        map.put(key + "." + childEntry.getKey(), childEntry.getValue());
+                    }
+                } else if (v instanceof List) {
+                    // this is here as documentation/placeholder.  no array/list support yet.
+                } else {
+                    Class<?> binding = mapBSONObjectToJavaType(v);
+                    if (binding != null) {
+                        map.put(key, binding);
+                    }
+                }
+            }
+        }
+        return map;
     }
     
     public static Class<?> mapBSONObjectToJavaType(Object o) {
