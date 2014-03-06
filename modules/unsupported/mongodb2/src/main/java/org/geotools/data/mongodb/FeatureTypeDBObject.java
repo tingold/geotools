@@ -107,8 +107,11 @@ public class FeatureTypeDBObject {
         
         DBObject gdDBO = extractDBObject(ftDBO, KEY_geometryDescriptor);
         String gdLocalName = extractString(gdDBO, KEY_localName);
-        DBObject crsDBO = extractDBObject(gdDBO, KEY_crs);
+        DBObject crsDBO = extractDBObject(gdDBO, KEY_crs, false);
         CoordinateReferenceSystem crs = decodeCRSFromGeoJSON(crsDBO);
+        if (crs == null) {
+            crs = DefaultGeographicCRS.WGS84;
+        }
         
         AttributeTypeBuilder atBuilder = new AttributeTypeBuilder();
         
