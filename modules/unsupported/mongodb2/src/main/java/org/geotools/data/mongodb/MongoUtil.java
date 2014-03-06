@@ -87,7 +87,8 @@ public class MongoUtil {
                     }
                 }
             }
-        }        
+        }
+        properties.remove("_id");
         return properties;
     }
     
