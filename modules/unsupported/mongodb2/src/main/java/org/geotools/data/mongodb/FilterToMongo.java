@@ -6,9 +6,11 @@ import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.Point;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
+import org.bson.types.ObjectId;
 import static org.geotools.util.Converters.convert;
 import org.opengis.filter.And;
 import org.opengis.filter.BinaryComparisonOperator;
@@ -38,6 +40,7 @@ import org.opengis.filter.expression.Multiply;
 import org.opengis.filter.expression.NilExpression;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.expression.Subtract;
+import org.opengis.filter.identity.Identifier;
 import org.opengis.filter.spatial.BBOX;
 import org.opengis.filter.spatial.Beyond;
 import org.opengis.filter.spatial.Contains;
@@ -74,10 +77,16 @@ import org.opengis.filter.temporal.TOverlaps;
 
 public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
-    CollectionMapper mapper;
+    final CollectionMapper mapper;
+    final MongoGeometryBuilder geometryBuilder;
 
     public FilterToMongo(CollectionMapper mapper) {
+        this(mapper, new MongoGeometryBuilder());
+    }
+    
+    public FilterToMongo(CollectionMapper mapper, MongoGeometryBuilder geometryBuilder) {
         this.mapper = mapper;
+        this.geometryBuilder = geometryBuilder;
     }
 
     protected BasicDBObject asDBObject(Object extraData) {
@@ -180,10 +189,10 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
     @Override
     public Object visit(PropertyIsEqualTo filter, Object extraData) {
-        return visitBinaryComparisonOp(filter, null, extraData);
+        return encodeBinaryComparisonOp(filter, null, extraData);
     }
 
-    BasicDBObject visitBinaryComparisonOp(BinaryComparisonOperator filter, String op, Object extraData) {
+    BasicDBObject encodeBinaryComparisonOp(BinaryComparisonOperator filter, String op, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
 
         Object expr1 = filter.getExpression1().accept(this, null);
@@ -202,27 +211,27 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
     @Override
     public Object visit(PropertyIsNotEqualTo filter, Object extraData) {
-        return visitBinaryComparisonOp(filter, "$ne", extraData);
+        return encodeBinaryComparisonOp(filter, "$ne", extraData);
     }
     
     @Override
     public Object visit(PropertyIsGreaterThan filter, Object extraData) {
-        return visitBinaryComparisonOp(filter, "$gt", extraData);
+        return encodeBinaryComparisonOp(filter, "$gt", extraData);
     }
     
     @Override
     public Object visit(PropertyIsGreaterThanOrEqualTo filter, Object extraData) {
-        return visitBinaryComparisonOp(filter, "$gte", extraData);
+        return encodeBinaryComparisonOp(filter, "$gte", extraData);
     }
     
     @Override
     public Object visit(PropertyIsLessThan filter, Object extraData) {
-        return visitBinaryComparisonOp(filter, "$lt", extraData);
+        return encodeBinaryComparisonOp(filter, "$lt", extraData);
     }
     
     @Override
     public Object visit(PropertyIsLessThanOrEqualTo filter, Object extraData) {
-        return visitBinaryComparisonOp(filter, "$lte", extraData);
+        return encodeBinaryComparisonOp(filter, "$lte", extraData);
     }
     
     // Mongo doesn't have LIKE but it does have Regex. So
@@ -257,6 +266,24 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
         output.put(prop, new BasicDBObject("$exists", false));
         return output;
     }
+    
+    @Override
+    public Object visit(Id filter, Object extraData) {
+        BasicDBObject output = asDBObject(extraData);
+        
+        Set<Identifier> ids = filter.getIdentifiers();
+        
+        List<ObjectId> objectIds = new ArrayList<ObjectId>(ids.size());
+        for (Identifier id : ids) {
+            objectIds.add(new ObjectId(id.toString()));
+        }
+        
+        Object objectIdDBO = (objectIds.size() > 1) ?
+                new BasicDBObject("$in", objectIds) : objectIds.get(0);
+        
+        output.put("_id", objectIdDBO);
+        return output;
+    }
 
     //
     // spatial
@@ -268,32 +295,55 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
         //TODO: handle swapping of operands
         Object e1 = filter.getExpression1().accept(this, Geometry.class);
 
-        Envelope env = filter.getExpression2().evaluate(null, Envelope.class);
+        Envelope envelope = filter.getExpression2().evaluate(null, Envelope.class);
 
         DBObject dbo = BasicDBObjectBuilder.start().
             push("$geoIntersects").
-              push("$geometry").
-                add("type", "Polygon").
-                add("coordinates", new double[][][]
-                  { { { env.getMinX(), env.getMinY() },
-                      { env.getMinX(), env.getMaxY() },
-                      { env.getMaxX(), env.getMaxY() },
-                      { env.getMaxX(), env.getMinY() },
-                      { env.getMinX(), env.getMinY() } } }).get();
+              add("$geometry", geometryBuilder.toObject(envelope)).get();
+                
+        output.put((String)e1, dbo);
+        return output;
+    }
+    
+    @Override
+    public Object visit(Intersects filter, Object extraData) {
+        
+        BasicDBObject output = asDBObject(extraData);
+
+        //TODO: handle swapping of operands
+        Object e1 = filter.getExpression1().accept(this, Geometry.class);
+
+        Geometry geometry = filter.getExpression2().evaluate(null, Geometry.class);
+
+        DBObject dbo = BasicDBObjectBuilder.start().
+            push("$geoIntersects").
+              add("$geometry", geometryBuilder.toObject(geometry)).get();
                 
         output.put((String)e1, dbo);
         return output;
     }
 
+    @Override
+    public Object visit(Within filter, Object extraData) {
+        BasicDBObject output = asDBObject(extraData);
+
+        //TODO: handle swapping of operands
+        Object e1 = filter.getExpression1().accept(this, Geometry.class);
+
+        Geometry geometry = filter.getExpression2().evaluate(null, Geometry.class);
+
+        DBObject dbo = BasicDBObjectBuilder.start().
+            push("$geoWithin").
+              add("$geometry", geometryBuilder.toObject(geometry)).get();
+                
+        output.put((String)e1, dbo);
+        return output;
+    }
+    
     //
     // currently unsupported
     //
     
-    @Override
-    public Object visit(Id filter, Object extraData) {
-        throw new UnsupportedOperationException();
-    }
-
     @Override
     public Object visitNullFilter(Object extraData) {
         throw new UnsupportedOperationException();
@@ -335,11 +385,6 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     }
     
     @Override
-    public Object visit(Intersects filter, Object extraData) {
-        throw new UnsupportedOperationException();
-    }
-    
-    @Override
     public Object visit(Overlaps filter, Object extraData) {
         throw new UnsupportedOperationException();
     }
@@ -350,15 +395,11 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     }
     
     @Override
-    public Object visit(Within filter, Object extraData) {
-        throw new UnsupportedOperationException();
-    }
-    
-    @Override
     public Object visit(Add expression, Object extraData) {
         throw new UnsupportedOperationException();
     }
     
+    @Override
     public Object visit(Divide expression, Object extraData) {
         throw new UnsupportedOperationException();
     }
@@ -456,30 +497,13 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
     Object encodeLiteral(Object literal) {
         if (literal instanceof Envelope) {
-            Envelope e = (Envelope) literal;
-            BasicDBList list = new BasicDBList();
-            list.add(list(e.getMinX(), e.getMinY()));
-            list.add(list(e.getMaxX(), e.getMaxY()));
-            return list;
+            return geometryBuilder.toObject((Envelope)literal);
         }
         else if (literal instanceof Geometry) {
-            if (literal instanceof Point) {
-                Point p = (Point) literal;
-                return list(p.getX(), p.getY());
-            }
-            else {
-                throw new UnsupportedOperationException("Literal geometry " + literal + " unsupported");
-            }
+            return geometryBuilder.toObject((Geometry)literal);
         }
         else {
             return literal.toString();
         }
-    }
-
-    BasicDBList list(double x, double y) {
-        BasicDBList l = new BasicDBList();
-        l.add(x);
-        l.add(y);
-        return l;
     }
 }

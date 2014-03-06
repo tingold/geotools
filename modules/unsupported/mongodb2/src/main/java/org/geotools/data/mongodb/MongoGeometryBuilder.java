@@ -10,6 +10,7 @@ import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DBObject;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.CoordinateSequence;
+import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
@@ -73,6 +74,10 @@ public class MongoGeometryBuilder {
         }
     }
 
+    public DBObject toObject(Envelope envelope) {
+        return toObject(geometryFactory.toGeometry(envelope));
+    }
+    
     public DBObject toObject(Geometry geom) {
         Geometries g = Geometries.get(geom);
         switch(g) {
