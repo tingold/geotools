@@ -76,36 +76,36 @@ public class MongoUtil {
     }
     
     public static Set<String> findIndexedFields(DBCollection dbc, String type) {
-        Set<String> properties = new LinkedHashSet<String>();
+        Set<String> fields = new LinkedHashSet<String>();
         List<DBObject> indices = dbc.getIndexInfo();
         for (DBObject index : indices) {
             Object key = index.get("key");
             if (key instanceof DBObject) {
                 for (Map.Entry entry : ((Map<?,?>)((DBObject)key).toMap()).entrySet()) {
                     if (type == null || type.equals(entry.getValue())) {
-                        properties.add(entry.getKey().toString());
+                        fields.add(entry.getKey().toString());
                     }
                 }
             }
         }
-        properties.remove("_id");
-        return properties;
+        fields.remove("_id");
+        return fields;
     }
     
     public static Map<String, Class<?>> findMappableFields(DBCollection dbc) {
-        return findMappableProperties(dbc.findOne());
+        return findMappableFields(dbc.findOne());
     }
     
-    public static Map<String, Class<?>> findMappableProperties(DBObject dbo) {
+    public static Map<String, Class<?>> findMappableFields(DBObject dbo) {
         if (dbo == null) {
             return  Collections.EMPTY_MAP;
         }
-        Map<String, Class<?>> map = doFindMappableProperties(dbo);
+        Map<String, Class<?>> map = doFindMappableFields(dbo);
         map.remove("_id");
         return map;
     }
     
-    private static Map<String, Class<?>> doFindMappableProperties(DBObject dbo) {
+    private static Map<String, Class<?>> doFindMappableFields(DBObject dbo) {
         if (dbo == null) {
             return Collections.EMPTY_MAP;
         }
@@ -113,18 +113,18 @@ public class MongoUtil {
         for (Map.Entry e : ((Map<?,?>)dbo.toMap()).entrySet()) {
             Object k = e.getKey();
             if (k instanceof String) {
-                String key = (String)k;
+                String field = (String)k;
                 Object v = e.getValue();
                 if (v instanceof DBObject) {
-                    for (Map.Entry<String, Class<?>> childEntry : doFindMappableProperties((DBObject)v).entrySet()) {
-                        map.put(key + "." + childEntry.getKey(), childEntry.getValue());
+                    for (Map.Entry<String, Class<?>> childEntry : doFindMappableFields((DBObject)v).entrySet()) {
+                        map.put(field + "." + childEntry.getKey(), childEntry.getValue());
                     }
                 } else if (v instanceof List) {
                     // this is here as documentation/placeholder.  no array/list support yet.
                 } else {
                     Class<?> binding = mapBSONObjectToJavaType(v);
                     if (binding != null) {
-                        map.put(key, binding);
+                        map.put(field, binding);
                     }
                 }
             }
