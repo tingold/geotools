@@ -2,6 +2,7 @@ package org.geotools.data.mongodb;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
+import com.mongodb.DBCollection;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
 import java.io.IOException;
@@ -223,14 +224,15 @@ public class MongoDataStore extends ContentDataStore {
                     String geometryName = candidateSchema.getGeometryDescriptor().getLocalName();
                     String geometryMapping = (String)candidateSchema.getDescriptor(geometryName).getUserData().get(KEY_mapping);
                     if (geometryMapping != null) {
+                        DBCollection collection = dataStoreDB.getCollection(candidateCollectionName);
                         Set<String> geometryIndices =  MongoUtil.findIndexedGeometries(
-                                dataStoreDB.getCollection(candidateCollectionName));
+                                collection);
                         // verify geometry mapping is indexed...
                         if (geometryIndices.contains(geometryMapping)) {
                             typeNameSet.add(candidateTypeName);
                         } else {
-                            LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", the geometry attribute, \"{1}\", is mapped to document key \"{2}\" but it is not spatialy indexed in collection {3}.{4}",
-                                    new Object[] { name(candidateTypeName), geometryName, geometryMapping, dataStoreDB.getName(), candidateCollectionName});
+                            LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", the geometry attribute, \"{1}\", is mapped to document key \"{2}\" but it is not spatialy indexed in collection {3}",
+                                    new Object[] { name(candidateTypeName), geometryName, geometryMapping, collection.getFullName()});
                         }
                     } else {
                         LOGGER.log(Level.WARNING, "Ignoring type \"{0}\", the geometry attribute \"{1}\" is not mapped to a document key",
@@ -254,14 +256,15 @@ public class MongoDataStore extends ContentDataStore {
         for(String collectionName : collectionsToCheck) {
             // make sure it's not system collection
             if (!collectionName.startsWith("system.")) {
+                DBCollection collection = dataStoreDB.getCollection(collectionName);
                 Set<String> geometryIndexSet = MongoUtil.findIndexedGeometries(
-                        dataStoreDB.getCollection(collectionName));
+                        collection);
                 // verify collection has an indexed geometry property
                 if(!geometryIndexSet.isEmpty()) {
                     typeNameSet.add(collectionName);
                 } else {
-                    LOGGER.log(Level.INFO, "Ignoring collection \"{0}.{1}\", unable to find key with spatial index", 
-                            new Object[] { dataStoreDB.getName(), collectionName });
+                    LOGGER.log(Level.INFO, "Ignoring collection \"{0}\", unable to find key with spatial index", 
+                            new Object[] { collection.getFullName() });
                 }
             }
         }
