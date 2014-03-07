@@ -22,4 +22,6 @@ public interface MongoSchemaStore {
     void deleteSchema(Name name) throws IOException;
     
     List<String> typeNames();
+    
+    void close();
 }

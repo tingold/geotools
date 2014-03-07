@@ -72,6 +72,10 @@ public class MongoDataStore extends ContentDataStore {
         }
         
         schemaStore = createSchemaStore(schemaStoreURI);
+        if (schemaStore == null) {
+            dataStoreClient.close(); // This smells bad too...
+            throw new IllegalArgumentException("Unable to initialize schema store with URI \"" + schemaStoreURI + "\"");
+        }
         
         filterCapabilities = createFilterCapabilties();
     }
@@ -106,13 +110,17 @@ public class MongoDataStore extends ContentDataStore {
             try {
                 return new MongoSchemaFileStore(schemaStoreURI);
             } catch (URISyntaxException e) {
-                throw new IllegalArgumentException("Unable to create file-based schema store with URI \"" + schemaStoreURI + "\"", e);
+                LOGGER.log(Level.SEVERE, "Unable to create file-based schema store with URI \"" + schemaStoreURI + "\"", e);
             }
-        } else if (schemaStoreURI.startsWith("mongodb://")) {
-            throw new UnsupportedOperationException("mongodb-based schema store not implemented yet.");
-        } else {
-            throw new IllegalArgumentException("Unsupported URI protocol for MongoDB schema store");
+        } else if (schemaStoreURI.startsWith("mongodb:")) {
+            try {
+                return new MongoSchemaDBStore(schemaStoreURI);
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE, "Unable to create mongodb-based schema store with URI \"" + schemaStoreURI + "\"", e);
+            }
         }
+        LOGGER.log(Level.SEVERE, "Unsupported URI \"{0}\" for schema store", schemaStoreURI);
+        return null;
     }
 
     final FilterCapabilities createFilterCapabilties() {
@@ -324,6 +332,7 @@ public class MongoDataStore extends ContentDataStore {
     @Override
     public void dispose() {
         dataStoreClient.close();
+        schemaStore.close();
         super.dispose();
     }
 }

@@ -101,6 +101,9 @@ public class MongoSchemaFileStore implements MongoSchemaStore {
     File schemaFile(String typeName) {
         return new File(schemaStoreFile, typeName + SUFFIX_json);
     }
+
+    @Override
+    public void close() { }
     
     private static class SchemaFilter implements FileFilter {
         @Override
