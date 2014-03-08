@@ -157,7 +157,7 @@ public class MongoFeatureSource extends ContentFeatureSource {
             }
         }
 
-        DBCursor c = null;
+        DBCursor c;
         if (q.getPropertyNames() != Query.ALL_NAMES) {
             BasicDBObject keys = new BasicDBObject();
             for (String p : q.getPropertyNames()) {
@@ -167,13 +167,13 @@ public class MongoFeatureSource extends ContentFeatureSource {
                 keys.put(mapper.getGeometryPath(), 1);
             }
             if (LOG.isLoggable(Level.FINE)) {
-                LOG.fine(String.format("find(query=%s, keys=%s)", query, keys));
+                LOG.fine(String.format("find(%s, %s)", query, keys));
             }
             c = collection.find(query, keys);
         }
         else {
             if (LOG.isLoggable(Level.FINE)) {
-                LOG.fine(String.format("find(query=%s)", query));
+                LOG.fine(String.format("find(%s)", query));
             }
             c = collection.find(query);
         }
