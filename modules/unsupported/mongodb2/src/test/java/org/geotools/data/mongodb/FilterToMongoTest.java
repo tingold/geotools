@@ -19,7 +19,7 @@ public class FilterToMongoTest extends TestCase {
     protected void setUp() throws Exception {
         super.setUp();
         ff = CommonFactoryFinder.getFilterFactory2();
-        filterToMongo = new FilterToMongo(new AddHocMapper());
+        filterToMongo = new FilterToMongo(new GeoJSONMapper());
     }
 
     public void testEqualTo() throws Exception {
@@ -28,7 +28,7 @@ public class FilterToMongoTest extends TestCase {
         assertNotNull(obj);
 
         assertEquals(1, obj.keySet().size());
-        assertEquals("bar", obj.get("foo"));
+        assertEquals("bar", obj.get("properties.foo"));
     }
 
     public void testBBOX() throws Exception {
