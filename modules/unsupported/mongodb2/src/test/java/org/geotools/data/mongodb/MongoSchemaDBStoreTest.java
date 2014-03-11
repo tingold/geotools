@@ -144,19 +144,24 @@ public class MongoSchemaDBStoreTest extends MongoSchemaStoreTest<MongoSchemaDBSt
     public void test_Constructor_String_DefaultDatabaseAndCollection() throws URISyntaxException, IOException {
         MongoClientURI clientURI = generateURI(host, port);
         MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI.toString());
-        assertThat(store.collection.getDB().getName(), is(equalTo(DEFAULT_databaseName)));
-        assertThat(store.collection.getName(), is(equalTo(DEFAULT_collectionName)));    
+        try {
+            assertThat(store.collection.getDB().getName(), is(equalTo(DEFAULT_databaseName)));
+            assertThat(store.collection.getName(), is(equalTo(DEFAULT_collectionName)));    
+        } finally {
+            store.close();
+        }
     }
     
     @Test
     public void test_Constructor_String_DefaultCollection() throws URISyntaxException, IOException {
         String database = createUniqueName();
+        MongoClientURI clientURI = generateURI(host, port, database);
+        MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI.toString());
         try {
-            MongoClientURI clientURI = generateURI(host, port, database);
-            MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI.toString());
             assertThat(store.collection.getDB().getName(), is(equalTo(database)));
             assertThat(store.collection.getName(), is(equalTo(DEFAULT_collectionName)));
         } finally {
+            store.close();
             client.dropDatabase(database);
         }
     }
@@ -165,12 +170,13 @@ public class MongoSchemaDBStoreTest extends MongoSchemaStoreTest<MongoSchemaDBSt
     public void test_Constructor_String() throws URISyntaxException, IOException {
         String database = createUniqueName();
         String collection = createUniqueName();
+        MongoClientURI clientURI = generateURI(host, port, database, collection);
+        MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI.toString());
         try {
-            MongoClientURI clientURI = generateURI(host, port, database, collection);
-            MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI.toString());
             assertThat(store.collection.getDB().getName(), is(equalTo(database)));
             assertThat(store.collection.getName(), is(equalTo(collection)));
         } finally {
+            store.close();
             client.dropDatabase(database);
         }
     }
@@ -179,19 +185,24 @@ public class MongoSchemaDBStoreTest extends MongoSchemaStoreTest<MongoSchemaDBSt
     public void test_Constructor_URI_DefaultDatabaseAndCollection() throws URISyntaxException, IOException {
         MongoClientURI clientURI = generateURI(host, port);
         MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI);
-        assertThat(store.collection.getDB().getName(), is(equalTo(DEFAULT_databaseName)));
-        assertThat(store.collection.getName(), is(equalTo(DEFAULT_collectionName)));    
+        try {
+            assertThat(store.collection.getDB().getName(), is(equalTo(DEFAULT_databaseName)));
+            assertThat(store.collection.getName(), is(equalTo(DEFAULT_collectionName)));    
+        } finally {
+            store.close();
+        }
     }
     
     @Test
     public void test_Constructor_URI_DefaultCollection() throws URISyntaxException, IOException {
         String database = createUniqueName();
+        MongoClientURI clientURI = generateURI(host, port, database);
+        MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI);
         try {
-            MongoClientURI clientURI = generateURI(host, port, database);
-            MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI);
             assertThat(store.collection.getDB().getName(), is(equalTo(database)));
             assertThat(store.collection.getName(), is(equalTo(DEFAULT_collectionName)));
         } finally {
+            store.close();
             client.dropDatabase(database);
         }
     }
@@ -200,12 +211,13 @@ public class MongoSchemaDBStoreTest extends MongoSchemaStoreTest<MongoSchemaDBSt
     public void test_Constructor_URI() throws URISyntaxException, IOException {
         String database = createUniqueName();
         String collection = createUniqueName();
+        MongoClientURI clientURI = generateURI(host, port, database, collection);
+        MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI);
         try {
-            MongoClientURI clientURI = generateURI(host, port, database, collection);
-            MongoSchemaDBStore store = new MongoSchemaDBStore(clientURI);
             assertThat(store.collection.getDB().getName(), is(equalTo(database)));
             assertThat(store.collection.getName(), is(equalTo(collection)));
         } finally {
+            store.close();
             client.dropDatabase(database);
         }
     }
