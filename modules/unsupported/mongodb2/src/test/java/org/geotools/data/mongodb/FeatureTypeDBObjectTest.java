@@ -10,6 +10,7 @@ import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Date;
 import java.util.Map;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.referencing.CRS;
@@ -34,24 +35,7 @@ public class FeatureTypeDBObjectTest {
     @Test
     public void testRoundTripConversion() throws FileNotFoundException, IOException, FactoryException {
 
-        SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
-        builder.setName("sampleType");
-        
-        builder.userData("mapping", "geometry");
-        builder.userData("encoding", "GeoJSON");
-        builder.add("geometry", MultiPolygon.class, CRS.decode("EPSG:4269", true));
-        
-        builder.userData("mapping", "child.prop1");
-        builder.add("prop1", String.class);
-        
-        builder.userData("mapping", "child.prop2");
-        builder.add("prop2", Double.class);
-        
-        builder.userData("mapping", "child.prop3");
-        builder.add("prop3", Integer.class);
-        
-        SimpleFeatureType original = builder.buildFeatureType();
-        original.getUserData().put("sample-key", "sample-value");
+        SimpleFeatureType original = buildDummyFeatureType("dummy");
         
         DBObject dbo = FeatureTypeDBObject.convert(original);
         
@@ -66,34 +50,93 @@ public class FeatureTypeDBObjectTest {
         dbo = (DBObject)o;
         
         SimpleFeatureType result = FeatureTypeDBObject.convert(dbo);
+     
+        compareFeatureTypes(original, result, false);
+    }
+    
+    @Test
+    public void crsFromGeoJSON() {
+        DBObject crsDBO = FeatureTypeDBObject.encodeCRSToGeoJSON(DefaultGeographicCRS.WGS84);
+
+        CoordinateReferenceSystem result = FeatureTypeDBObject.decodeCRSFromGeoJSON(crsDBO);
+
+        assertTrue(CRS.equalsIgnoreMetadata(DefaultGeographicCRS.WGS84, result));
+    }
+    
+    static SimpleFeatureType buildDummyFeatureType(String typeName) throws FactoryException {
+        SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
+        builder.setName(typeName);
         
-        // verify we persist and restore name
-        assertThat(result.getTypeName(), is(equalTo(original.getTypeName())));
+        builder.userData("mapping", "geometry");
+        builder.userData("encoding", "GeoJSON");
+        builder.add("geometry", MultiPolygon.class, CRS.decode("EPSG:4269", true));
+
+        builder.userData("mapping", "child.prop1");
+        builder.add("propString", String.class);
+        
+        builder.userData("mapping", "child.prop2");
+        builder.add("propBoolean", Boolean.class);
+        
+        builder.userData("mapping", "child.prop3");
+        builder.add("propFloat", Float.class);
+        
+        builder.userData("mapping", "child.prop4");
+        builder.add("propDouble", Double.class);
+        
+        builder.userData("mapping", "child.prop5");
+        builder.add("propByte", Byte.class);
+        
+        builder.userData("mapping", "child.prop6");
+        builder.add("propShort", Short.class);
+        
+        builder.userData("mapping", "child.prop7");
+        builder.add("propInteger", Integer.class);
+        
+        builder.userData("mapping", "child.prop8");
+        builder.add("propLong", Long.class);
+        
+        builder.userData("mapping", "child.prop9");
+        builder.add("propDate", Date.class);
+        
+        SimpleFeatureType original = builder.buildFeatureType();
+        original.getUserData().put("sample-key", "sample-value");
+        
+        return original;
+    }
+    
+    static void compareFeatureTypes(SimpleFeatureType left, SimpleFeatureType right, boolean strictGeometryClass) {
+        
+        assertThat(right.getTypeName(), is(equalTo(left.getTypeName())));
         // verify feature type user data persisted
-        Map<?,?> resultUserData = result.getUserData();
-        Map<?,?> originalUserData = original.getUserData();
+        Map<?,?> resultUserData = right.getUserData();
+        Map<?,?> originalUserData = left.getUserData();
         assertThat(resultUserData.size(), is(equalTo(originalUserData.size())));
         for (Map.Entry entry : resultUserData.entrySet()) {
             assertThat(entry.getValue(), is(equalTo(originalUserData.get(entry.getKey()))));
         }
         
         // verify we persist and restore same number of attributes
-        assertThat(result.getAttributeCount(), is(equalTo(original.getAttributeCount())));
+        assertThat(right.getAttributeCount(), is(equalTo(left.getAttributeCount())));
         
         // verify we persist and restore geometry name
-        String rgdName = result.getGeometryDescriptor().getLocalName();
-        assertThat(rgdName, is(equalTo(original.getGeometryDescriptor().getLocalName())));
+        String rgdName = right.getGeometryDescriptor().getLocalName();
+        assertThat(rgdName, is(equalTo(left.getGeometryDescriptor().getLocalName())));
         // verify we persist and restore CRS (this should always be WGS84 in the wild)
-        assertTrue("CRS are equal", CRS.equalsIgnoreMetadata(result.getCoordinateReferenceSystem(), original.getCoordinateReferenceSystem()));
+        assertTrue("CRS are equal", CRS.equalsIgnoreMetadata(right.getCoordinateReferenceSystem(), left.getCoordinateReferenceSystem()));
         
-        // NOTE!  Geometry type is generalized when persisted...  This 2 asserts are here for documentation only
-        assertThat(result.getGeometryDescriptor().getType().getBinding().getName(),
-                is(not(equalTo(original.getGeometryDescriptor().getType().getBinding().getName()))));
-        assertThat(result.getGeometryDescriptor().getType().getBinding().getName(), is(equalTo(Geometry.class.getName())));
         
-        for (AttributeDescriptor rad: result.getAttributeDescriptors()) {
+        if (strictGeometryClass) {
+             assertThat(right.getGeometryDescriptor().getType().getBinding().getSimpleName(),
+                     is(equalTo(left.getGeometryDescriptor().getType().getBinding().getSimpleName())));
+        } else {
+            // NOTE!  Geometry type is generalized when persisted...  
+            assertThat(Geometry.class.isAssignableFrom(right.getGeometryDescriptor().getType().getBinding()), is(equalTo(true)));
+            assertThat(Geometry.class.isAssignableFrom(left.getGeometryDescriptor().getType().getBinding()), is(equalTo(true)));
+        }
+        
+        for (AttributeDescriptor rad: right.getAttributeDescriptors()) {
             String radName = rad.getLocalName();
-            AttributeDescriptor oad = original.getDescriptor(radName);
+            AttributeDescriptor oad = left.getDescriptor(radName);
             assertThat(rad.getMinOccurs(), is(equalTo(oad.getMinOccurs())));
             assertThat(rad.getMaxOccurs(), is(equalTo(oad.getMaxOccurs())));
             assertThat(rad.getDefaultValue(), is(equalTo(oad.getDefaultValue())));
@@ -107,14 +150,5 @@ public class FeatureTypeDBObjectTest {
                 assertThat(entry.getValue(), is(equalTo(oadUserData.get(entry.getKey()))));
             }
         }
-    }
-    
-    @Test
-    public void crsFromGeoJSON() {
-        DBObject crsDBO = FeatureTypeDBObject.encodeCRSToGeoJSON(DefaultGeographicCRS.WGS84);
-
-        CoordinateReferenceSystem result = FeatureTypeDBObject.decodeCRSFromGeoJSON(crsDBO);
-
-        assertTrue(CRS.equalsIgnoreMetadata(DefaultGeographicCRS.WGS84, result));
     }
 }

@@ -30,17 +30,24 @@ public class MongoSchemaFileStore implements MongoSchemaStore {
     
     final File schemaStoreFile;
 
-    public MongoSchemaFileStore(String uri) throws URISyntaxException {
+    public MongoSchemaFileStore(String uri) throws IOException, URISyntaxException {
         this(new URI(uri));
     }
     
-    public MongoSchemaFileStore(URI uri) {
-        schemaStoreFile = new File(uri);
-        schemaStoreFile.mkdirs();
+    public MongoSchemaFileStore(URI uri) throws IOException {
+        this(new File(uri));
+    }
+    
+    public MongoSchemaFileStore(File file) throws IOException {
+        schemaStoreFile = file;
+        validateDirectory(schemaStoreFile);
     }
     
     @Override
     public void storeSchema(SimpleFeatureType schema) throws IOException {
+        if (schema == null) {
+            return;
+        }
         File schemaFile = schemaFile(schema.getTypeName());
         BufferedWriter writer = new BufferedWriter(new FileWriter(schemaFile));
         try {
@@ -52,6 +59,9 @@ public class MongoSchemaFileStore implements MongoSchemaStore {
 
     @Override
     public SimpleFeatureType retrieveSchema(Name name) throws IOException {
+        if (name == null) {
+            return null;
+        }
         File schemaFile = schemaFile(name);
         if (!schemaFile.canRead()) {
             return null;
@@ -77,6 +87,9 @@ public class MongoSchemaFileStore implements MongoSchemaStore {
 
     @Override
     public void deleteSchema(Name name) throws IOException {
+        if (name == null) {
+            return;
+        }
         schemaFile(name).delete();
     }
 
@@ -111,4 +124,21 @@ public class MongoSchemaFileStore implements MongoSchemaStore {
             return file.isFile() && file.getName().endsWith(SUFFIX_json);
         }
     }
+    
+    static void validateDirectory(File file) throws IOException {
+        if (!file.exists() && !file.mkdirs()) {
+            throw new IOException("Schema store directory does not exist and could not be created: " + file.getAbsolutePath());
+        }
+        if (file.isDirectory()) {
+            // File.canWrite() doesn't report as intended for directories on
+            // certain platforms with certain permissions scenarios.  Will
+            // instead we verify we can create a file then delete it.
+            if (!File.createTempFile("test", ".tmp", file).delete()) {
+                throw new IOException("Unable to write to schema store directory: " + file.getAbsolutePath());
+            }
+        } else {
+            throw new IOException("Specified schema store directory exists but is not a directory: " + file.getAbsolutePath());
+        }
+    }
+    
 }
