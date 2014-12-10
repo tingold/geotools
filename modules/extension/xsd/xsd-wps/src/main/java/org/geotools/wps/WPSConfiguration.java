@@ -24,6 +24,8 @@ import net.opengis.wps10.DefaultType2;
 import net.opengis.wps10.ProcessOutputsType1;
 import net.opengis.wps10.Wps10Factory;
 
+import org.geotools.filter.v1_1.FilterParserDelegate;
+import org.geotools.filter.v2_0.FESParserDelegate;
 import org.geotools.gml3.GMLParserDelegate;
 import org.geotools.ows.v1_1.OWSConfiguration;
 import org.geotools.wfs.WFSParserDelegate;
@@ -85,7 +87,7 @@ public class WPSConfiguration extends Configuration {
         bindings.put(WPS.ProcessBriefType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ProcessBriefType));
         bindings.put(WPS.ProcessDescriptionType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ProcessDescriptionType));
         bindings.put(WPS.ProcessFailedType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ProcessFailedType));
-        bindings.put(WPS.ProcessStartedType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ProcessStartedType));
+        bindings.put(WPS.ProcessStartedType, new SimpleContentComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ProcessStartedType));
         bindings.put(WPS.RequestBaseType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.RequestBaseType));
         bindings.put(WPS.ResponseBaseType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ResponseBaseType));
         bindings.put(WPS.ResponseDocumentType, new ComplexEMFBinding(Wps10Factory.eINSTANCE,WPS.ResponseDocumentType));
@@ -123,5 +125,7 @@ public class WPSConfiguration extends Configuration {
         //register parser delegates for parsing schemas we do not know about
         container.registerComponentInstance( new GMLParserDelegate() );
         container.registerComponentInstance( new WFSParserDelegate() );
+        container.registerComponentInstance( new FilterParserDelegate() );
+        container.registerComponentInstance( new FESParserDelegate() );
     }
 }

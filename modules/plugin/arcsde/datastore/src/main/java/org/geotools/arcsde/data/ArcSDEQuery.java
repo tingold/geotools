@@ -33,6 +33,7 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 import org.geotools.arcsde.ArcSdeException;
 import org.geotools.arcsde.data.FIDReader.SdeManagedFidReader;
 import org.geotools.arcsde.data.FIDReader.UserManagedFidReader;
+import org.geotools.arcsde.filter.ArcSdeSimplifyingFilterVisitor;
 import org.geotools.arcsde.filter.FilterToSQLSDE;
 import org.geotools.arcsde.filter.GeometryEncoderException;
 import org.geotools.arcsde.filter.GeometryEncoderSDE;
@@ -60,6 +61,7 @@ import org.opengis.filter.sort.SortBy;
 import org.opengis.filter.sort.SortOrder;
 
 import com.esri.sde.sdk.client.SeConnection;
+import com.esri.sde.sdk.client.SeDBMSInfo;
 import com.esri.sde.sdk.client.SeException;
 import com.esri.sde.sdk.client.SeExtent;
 import com.esri.sde.sdk.client.SeFilter;
@@ -489,7 +491,8 @@ class ArcSDEQuery {
      * Convenient method to just calculate the result count of a given query.
      */
     public static int calculateResultCount(final ISession session, final FeatureTypeInfo typeInfo,
-            final Query query, final ArcSdeVersionHandler versioningHandler) throws IOException {
+            final Query query, final ArcSdeVersionHandler versioningHandler) throws IOException,
+            UnsupportedOperationException {
 
         ArcSDEQuery countQuery = null;
         final int count;
@@ -568,19 +571,27 @@ class ArcSDEQuery {
      * the result is traversed counting the number of rows inside a while loop
      * 
      */
-    public int calculateResultCount() throws IOException {
+    public int calculateResultCount() throws IOException, UnsupportedOperationException {
 
         final SimpleFeatureType schema = this.schema;
-        final GeometryDescriptor geometryDescriptor = schema.getGeometryDescriptor();
 
-        final String colName;
-        if (geometryDescriptor == null) {
-            // gemetryless type, use any other column for the query
-            colName = schema.getDescriptor(0).getLocalName();
-        } else {
-            colName = geometryDescriptor.getLocalName();
+        final List <String> colNames = new ArrayList<String>(2);
+        {
+            String fidAtt;
+            if (fidReader.getFidColumn() == null) {
+                fidAtt = schema.getDescriptor(0).getLocalName();
+            } else {
+                fidAtt = fidReader.getFidColumn();
+            }
+            colNames.add(fidAtt);
         }
-        final SeQueryInfo qInfo = filters.getQueryInfo(new String[] { colName });
+        if (null != schema.getGeometryDescriptor()) {
+            String geomCol = schema.getGeometryDescriptor().getLocalName();
+            //geomCol = filters.getSqlEncoder().getColumnDefinition(geomCol);
+            colNames.add(geomCol);
+        }
+        
+        final SeQueryInfo qInfo = filters.getQueryInfo(colNames.toArray(new String[colNames.size()]));
 
         final SeFilter[] spatialFilters = filters.getSpatialFilters();
 
@@ -589,16 +600,49 @@ class ArcSDEQuery {
             public Integer execute(ISession session, SeConnection connection) throws SeException,
                     IOException {
 
+                final SeQueryInfo queryInfo = qInfo;
+
                 SeQuery query = new SeQuery(connection);
+
                 try {
                     versioningHandler.setUpStream(session, query);
 
                     if (spatialFilters != null && spatialFilters.length > 0) {
-                        query.setSpatialConstraints(SeQuery.SE_OPTIMIZE, true, spatialFilters);
+
+                        final boolean calcMasks = true;// use the spatial query to calculate
+                        // statistics.
+                        final short searchOrder = SeQuery.SE_OPTIMIZE;
+                        query.setSpatialConstraints(searchOrder, calcMasks, spatialFilters);
+
+                        final SeDBMSInfo dbmsInfo = connection.getDBMSInfo();
+                        final boolean unsupported = versioningHandler != ArcSdeVersionHandler.NONVERSIONED_HANDLER
+                                && dbmsInfo.dbmsId == SeDBMSInfo.SE_DBMS_IS_ORACLE;
+
+                        if (unsupported) {
+                            LOGGER.fine("ArcSDE on Oracle can't calculate count statistics "
+                                    + "on versioned layers with spatial filters");
+                            /*
+                             * Despite the FeatureSource.getCount() contract saying it's ok to
+                             * return -1 if count is too expensive to calculate, the GeoServer
+                             * codebase is plagued of FeatureCollection.size() calls depending on
+                             * actual result counts or some operations don't work at all. return -1;
+                             */
+
+                            query.prepareQueryInfo(queryInfo);
+                            query.execute();
+                            int count = 0;
+                            while (query.fetch() != null) {
+                                count++;
+                            }
+                            return count;
+                        }
                     }
 
-                    SeTable.SeTableStats tableStats = query.calculateTableStatistics("*",
-                            SeTable.SeTableStats.SE_COUNT_STATS, qInfo, 0);
+                    final int defaultMaxDistinctValues = 0;
+                    final SeTable.SeTableStats tableStats;
+                    final String statsCol = colNames.get(0);
+                    tableStats = query.calculateTableStatistics(statsCol,
+                            SeTable.SeTableStats.SE_COUNT_STATS, queryInfo, defaultMaxDistinctValues);
 
                     int actualCount = tableStats.getCount();
                     return new Integer(actualCount);
@@ -627,10 +671,25 @@ class ArcSDEQuery {
                 public SeExtent execute(ISession session, SeConnection connection)
                         throws SeException, IOException {
 
-                    final String[] spatialCol = { schema.getGeometryDescriptor().getLocalName() };
+                    final String[] queryColumns;
+                    {
+                        List<String> cols = new ArrayList<String>(2);
+                        String geomCol = schema.getGeometryDescriptor().getLocalName();
+                        geomCol = filters.getSqlEncoder().getColumnDefinition(geomCol);
+                        
+                        String fidAtt;
+                        if (fidReader.getFidColumn() == null) {
+                            fidAtt = schema.getDescriptor(0).getLocalName();
+                        } else {
+                            fidAtt = fidReader.getFidColumn();
+                        }
+                        cols.add(fidAtt);
+                        queryColumns = cols.toArray(new String[cols.size()]);
+                    }
+
                     // fullConstruct may hold information about multiple tables in case of an
                     // in-process view
-                    final SeSqlConstruct fullConstruct = filters.getQueryInfo(spatialCol)
+                    final SeSqlConstruct fullConstruct = filters.getQueryInfo(queryColumns)
                             .getConstruct();
                     String whereClause = fullConstruct.getWhere();
                     if (whereClause == null) {
@@ -658,7 +717,7 @@ class ArcSDEQuery {
                         sqlCons.setWhere(whereClause);
 
                         final SeQueryInfo seQueryInfo = new SeQueryInfo();
-                        seQueryInfo.setColumns(spatialCol);
+                        seQueryInfo.setColumns(queryColumns);
                         seQueryInfo.setConstruct(sqlCons);
 
                         extent = extentQuery.calculateLayerExtent(seQueryInfo);
@@ -828,8 +887,8 @@ class ArcSDEQuery {
      * @author $author$
      * 
      * 
- *
- * @source $URL$
+     * 
+     * @source $URL$
      *         http://svn.osgeo.org/geotools/trunk/modules/plugin/arcsde/datastore/src/main/java
      *         /org/geotools/arcsde/data/ArcSDEQuery.java $
      * @version $Revision: 1.9 $
@@ -909,10 +968,15 @@ class ArcSDEQuery {
          */
         private void createGeotoolsFilters() {
             FilterToSQLSDE sqlEncoder = getSqlEncoder();
-
+            
+            // first off, simplify the filter
+            ArcSdeSimplifyingFilterVisitor visitor = new ArcSdeSimplifyingFilterVisitor(featureType);
+            Filter simplified = (Filter) sourceFilter.accept(visitor, null);
+            
+            // then perform the splits
             PostPreProcessFilterSplittingVisitor unpacker = new PostPreProcessFilterSplittingVisitor(
                     sqlEncoder.getCapabilities(), featureType, null);
-            sourceFilter.accept(unpacker, null);
+            simplified.accept(unpacker, null);
 
             SimplifyingFilterVisitor filterSimplifier = new SimplifyingFilterVisitor();
             final String typeName = this.featureType.getTypeName();
@@ -938,7 +1002,6 @@ class ArcSDEQuery {
                 LOGGER.fine("Spatial-Filter portion of SDE Query: '" + geometryFilter + "'");
 
             this.unsupportedFilter = unpacker.getFilterPost();
-            this.unsupportedFilter = (Filter) this.unsupportedFilter.accept(filterSimplifier, null);
             if (LOGGER.isLoggable(Level.FINE) && unsupportedFilter != null)
                 LOGGER.fine("Unsupported (and therefore ignored) portion of SDE Query: '"
                         + unsupportedFilter + "'");

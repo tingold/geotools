@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import org.geotools.data.jdbc.FilterToSQL;
+import org.geotools.factory.Hints;
 import org.geotools.jdbc.BasicSQLDialect;
 import org.geotools.jdbc.JDBCDataStore;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -92,7 +93,13 @@ public class MySQLDialectBasic extends BasicSQLDialect {
             StringBuffer sql) {
         delegate.encodeGeometryColumn(gatt, prefix, srid, sql);
     }
-    
+
+    @Override
+    public void encodeGeometryColumn(GeometryDescriptor gatt, String prefix,
+            int srid, Hints hints, StringBuffer sql) {
+        delegate.encodeGeometryColumn(gatt, prefix, srid, hints, sql);
+    }
+
     @Override
     public void encodeColumnType(String sqlTypeName, StringBuffer sql) {
         delegate.encodeColumnType(sqlTypeName, sql);
@@ -159,7 +166,7 @@ public class MySQLDialectBasic extends BasicSQLDialect {
     }
     
     @Override
-    public void encodeGeometryValue(Geometry value, int srid, StringBuffer sql)
+    public void encodeGeometryValue(Geometry value, int dimension, int srid, StringBuffer sql)
             throws IOException {
         if (value != null) {
             sql.append("GeomFromText('");

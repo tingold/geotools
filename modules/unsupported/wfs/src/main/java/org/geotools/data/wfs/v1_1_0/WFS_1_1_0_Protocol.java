@@ -18,8 +18,11 @@ package org.geotools.data.wfs.v1_1_0;
 
 import static org.geotools.data.wfs.protocol.http.HttpMethod.GET;
 import static org.geotools.data.wfs.protocol.http.HttpMethod.POST;
+import static org.geotools.data.wfs.protocol.http.HttpUtil.createUrl;
 import static org.geotools.data.wfs.protocol.wfs.WFSOperationType.DESCRIBE_FEATURETYPE;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -29,12 +32,12 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -64,22 +67,19 @@ import net.opengis.wfs.GetFeatureType;
 import net.opengis.wfs.GetGmlObjectType;
 import net.opengis.wfs.LockFeatureType;
 import net.opengis.wfs.OutputFormatListType;
+import net.opengis.wfs.ResultTypeType;
 import net.opengis.wfs.TransactionType;
 import net.opengis.wfs.WFSCapabilitiesType;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.emf.ecore.EObject;
-import org.eclipse.xsd.XSDSchema;
-import org.eclipse.xsd.util.XSDParser;
-import org.eclipse.xsd.util.XSDSchemaLocationResolver;
-import org.eclipse.xsd.util.XSDSchemaLocator;
 import org.geotools.data.DataSourceException;
 import org.geotools.data.Query;
-import org.geotools.data.wfs.protocol.http.HTTPProtocol;
-import org.geotools.data.wfs.protocol.http.HTTPProtocol.POSTCallBack;
-import org.geotools.data.wfs.protocol.http.HTTPResponse;
+import org.geotools.data.ows.HTTPClient;
+import org.geotools.data.ows.HTTPResponse;
 import org.geotools.data.wfs.protocol.http.HttpMethod;
 import org.geotools.data.wfs.protocol.wfs.GetFeature;
+import org.geotools.data.wfs.protocol.wfs.GetFeature.ResultType;
 import org.geotools.data.wfs.protocol.wfs.Version;
 import org.geotools.data.wfs.protocol.wfs.WFSOperationType;
 import org.geotools.data.wfs.protocol.wfs.WFSProtocol;
@@ -88,25 +88,16 @@ import org.geotools.data.wfs.v1_1_0.WFSStrategy.RequestComponents;
 import org.geotools.data.wfs.v1_1_0.parsers.EmfAppSchemaParser;
 import org.geotools.filter.Capabilities;
 import org.geotools.geometry.jts.ReferencedEnvelope;
-import org.geotools.gml3.smil.SMIL20;
-import org.geotools.gml3.smil.SMIL20LANG;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.util.logging.Logging;
 import org.geotools.wfs.WFS;
-import org.geotools.wfs.v1_1.WFSConfiguration;
-import org.geotools.xlink.XLINK;
 import org.geotools.xml.Configuration;
 import org.geotools.xml.Encoder;
 import org.geotools.xml.Parser;
-import org.geotools.xml.SchemaLocationResolver;
-import org.geotools.xml.SchemaLocator;
-import org.geotools.xml.Schemas;
-import org.geotools.xml.XSD;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.filter.Filter;
 import org.opengis.filter.capability.FilterCapabilities;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
-import org.picocontainer.MutablePicoContainer;
 import org.xml.sax.SAXException;
 
 /**
@@ -129,7 +120,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
     private static final Logger LOGGER = Logging.getLogger("org.geotools.data.wfs");
 
     private WFSStrategy strategy;
-
+    
     /**
      * The WFS GetCapabilities document. Final by now, as we're not handling updatesequence, so will
      * not ask the server for an updated capabilities during the life-time of this datastore.
@@ -142,14 +133,17 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
      */
     private final Map<String, FeatureTypeType> typeInfos;
 
-    private HTTPProtocol http;
+    protected HTTPClient http;
 
-    private final Charset defaultEncoding;
+    protected final Charset defaultEncoding;
 
-    public WFS_1_1_0_Protocol(InputStream capabilitiesReader, HTTPProtocol http,
-            Charset defaultEncoding) throws IOException {
+    public WFS_1_1_0_Protocol(InputStream capabilitiesReader, HTTPClient http,
+            Charset defaultEncoding, WFSStrategy strategy) throws IOException {
         this.defaultEncoding = defaultEncoding;
-        this.strategy = new DefaultWFSStrategy();
+        this.strategy = strategy;
+        if(this.strategy == null) {
+            this.strategy = new DefaultWFSStrategy();
+        }
         this.capabilities = parseCapabilities(capabilitiesReader);
         this.http = http;
         this.typeInfos = new HashMap<String, FeatureTypeType>();
@@ -158,8 +152,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         QName typeName;
         for (FeatureTypeType ftype : ftypes) {
             typeName = ftype.getName();
-            assert !("".equals(typeName.getPrefix()));
-            String prefixedTypeName = typeName.getPrefix() + ":" + typeName.getLocalPart();
+            String prefixedTypeName = this.strategy.getPrefixedTypeName(typeName);
             typeInfos.put(prefixedTypeName, ftype);
         }
     }
@@ -475,11 +468,21 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         URL url = getOperationURL(WFSOperationType.GET_FEATURE, false);
 
         RequestComponents reqParts = strategy.createGetFeatureRequest(this, request);
-        Map<String, String> getFeatureKvp = reqParts.getKvpParameters();
         GetFeatureType requestType = reqParts.getServerRequest();
-
-        System.out.println(" > getFeatureGET: Request url: " + url + ". Parameters: "
-                + getFeatureKvp);
+        
+        // build the kvp taking into account eventual vendor params
+        Map<String, String> getFeatureKvp = reqParts.getKvpParameters();
+        if(request instanceof GetFeatureQueryAdapter) {
+            GetFeatureQueryAdapter adapter = (GetFeatureQueryAdapter) request;
+            if(adapter.getVendorParameter() != null) {
+                getFeatureKvp.putAll(adapter.getVendorParameter());
+            }
+        }
+        
+        if (request.getResultType() == ResultType.HITS) {
+        	getFeatureKvp.put("RESULTTYPE", ResultTypeType.HITS_LITERAL.getLiteral());
+        }
+        
         WFSResponse response = issueGetRequest(requestType, url, getFeatureKvp);
 
         return response;
@@ -493,7 +496,30 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
             throw new UnsupportedOperationException(
                     "The server does not support GetFeature for HTTP method POST");
         }
-        URL url = getOperationURL(WFSOperationType.GET_FEATURE, true);
+        URL postURL = getOperationURL(WFSOperationType.GET_FEATURE, true);
+        
+        // support vendor parameters, GeoServer way
+        if(request instanceof GetFeatureQueryAdapter) {
+            GetFeatureQueryAdapter adapter = (GetFeatureQueryAdapter) request;
+            if(adapter.getVendorParameter() != null) {
+                String url = postURL.toString();
+                if ((url == null) || !url.endsWith("?")) {
+                    url += "?";
+                }
+                
+                boolean first = true;
+                for (Map.Entry<String, String> entry : adapter.getVendorParameter().entrySet()) {
+                    if(first) {
+                        first = false;
+                    } else {
+                        url += "&";
+                    }
+                    url += entry.getKey() + "=" + URLEncoder.encode(entry.getValue(), "UTF-8");
+                }
+                
+                postURL = new URL(url);
+            }
+        }
 
         RequestComponents reqParts = strategy.createGetFeatureRequest(this, request);
         GetFeatureType serverRequest = reqParts.getServerRequest();
@@ -509,7 +535,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         if (!XMLConstants.DEFAULT_NS_PREFIX.equals(prefix)) {
             encoder.getNamespaces().declarePrefix(prefix, namespace);
         }
-        WFSResponse response = issuePostRequest(serverRequest, url, encoder);
+        WFSResponse response = issuePostRequest(serverRequest, postURL, encoder);
 
         return response;
     }
@@ -543,7 +569,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         return typeInfos.get(typeName);
     }
 
-    private WFSCapabilitiesType parseCapabilities(InputStream capabilitiesReader)
+    protected WFSCapabilitiesType parseCapabilities(InputStream capabilitiesReader)
             throws IOException {
         final Configuration wfsConfig = strategy.getWfsConfiguration();
         final Parser parser = new Parser(wfsConfig);
@@ -608,7 +634,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
 
         URL url;
         try {
-            url = http.createUrl(describeFeatureTypeUrl, kvp);
+            url = createUrl(describeFeatureTypeUrl, kvp);
         } catch (MalformedURLException e) {
             throw new RuntimeException(e);
         }
@@ -618,50 +644,39 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
     private WFSResponse issueGetRequest(EObject request, URL url, Map<String, String> kvp)
             throws IOException {
         WFSResponse response;
-        HTTPResponse httpResponse = http.issueGet(url, kvp);
+        final URL targetUrl = createUrl(url, kvp);
+        HTTPResponse httpResponse = http.get(targetUrl);
 
         String responseCharset = httpResponse.getResponseCharset();
         Charset charset = responseCharset == null ? null : Charset.forName(responseCharset);
         String contentType = httpResponse.getContentType();
         InputStream responseStream = httpResponse.getResponseStream();
-        String target = httpResponse.getTargetUrl();
-        response = new WFSResponse(target, request, charset, contentType, responseStream);
+        response = new WFSResponse(targetUrl.toExternalForm(), request, charset, contentType, responseStream);
         return response;
     }
 
     private WFSResponse issuePostRequest(final EObject request, final URL url, final Encoder encoder)
             throws IOException {
 
-        final POSTCallBack requestBodyCallback = new POSTCallBack() {
-            public long getContentLength() {
-                // don't know
-                return -1;
-            }
-
-            public String getContentType() {
-                return "text/xml";
-            }
-
-            public void writeBody(final OutputStream out) throws IOException {
-                final Charset charset = defaultEncoding == null ? Charset.forName("UTF-8")
-                        : defaultEncoding;
-                encoder.setEncoding(charset);
-                // if (LOGGER.isLoggable(Level.FINEST)) {
-                // System.err.println("Sending POST request: ");
-                // WFS_1_1_0_Protocol.encode(request, wfsConfig, System.err, charset);
-                // }
-                WFS_1_1_0_Protocol.encode(request, encoder, out);
-            }
-        };
-
-        HTTPResponse httpResponse = http.issuePost(url, requestBodyCallback);
+        InputStream postContent;
+        {
+            final Charset charset = defaultEncoding == null ? Charset.forName("UTF-8")
+                    : defaultEncoding;
+            encoder.setEncoding(charset);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            WFS_1_1_0_Protocol.encode(request, encoder, out);
+            
+            postContent = new ByteArrayInputStream(out.toByteArray());
+        }
+        
+        HTTPResponse httpResponse = http.post(url, postContent, "text/xml");
 
         String responseCharset = httpResponse.getResponseCharset();
         Charset charset = responseCharset == null ? null : Charset.forName(responseCharset);
         String contentType = httpResponse.getContentType();
         InputStream responseStream = httpResponse.getResponseStream();
-        String target = httpResponse.getTargetUrl();
-        WFSResponse response = new WFSResponse(target, request, charset, contentType,
+
+        WFSResponse response = new WFSResponse(url.toExternalForm(), request, charset, contentType,
                 responseStream);
         return response;
     }
@@ -732,7 +747,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         } else if (originatingRequest instanceof TransactionType) {
             encodeElementName = WFS.Transaction;
         } else {
-            throw new IllegalArgumentException("Unkown xml element name for " + originatingRequest);
+            throw new IllegalArgumentException("Unknown xml element name for " + originatingRequest);
         }
         return encodeElementName;
     }
@@ -740,7 +755,7 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
     public String getDefaultOutputFormat(WFSOperationType operation) {
         return strategy.getDefaultOutputFormat(this, operation);
     }
-
+    
     public Filter[] splitFilters(Filter filter) {
         FilterCapabilities filterCapabilities = getFilterCapabilities();
         Capabilities filterCaps = new Capabilities();
@@ -760,7 +775,8 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         File tmpFile = null;
         final URL describeUrl;
         {
-            if(http.isAuthenticating()){
+            final boolean isAuth = http.getUser() != null;
+            if(isAuth){
                 WFSResponse wfsResponse = describeFeatureTypeGET(prefixedTypeName, null);
                 tmpFile = File.createTempFile("describeft", ".xsd");
                 OutputStream output = new FileOutputStream(tmpFile);
@@ -785,7 +801,10 @@ public class WFS_1_1_0_Protocol implements WFSProtocol {
         SimpleFeatureType featureType;
         try {
             featureType = EmfAppSchemaParser.parseSimpleFeatureType(wfsConfiguration,
-                    featureDescriptorName, describeUrl, crs);
+                    featureDescriptorName, describeUrl, crs,
+                    strategy.getNamespaceURIMappings(),
+                    strategy.getFieldTypeMappings(),
+                    strategy.canIgnoreMissingElementDeclaration());
         } finally {
             if (tmpFile != null) {
                 tmpFile.delete();

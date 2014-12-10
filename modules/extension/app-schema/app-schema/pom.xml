@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.geotools</groupId>
         <artifactId>app-schema</artifactId>
-        <version>8-SNAPSHOT</version>
+        <version>13-SNAPSHOT</version>
     </parent>
 
     <groupId>org.geotools</groupId>
@@ -39,14 +39,24 @@
             <email>Rini.Angreani@csiro.au</email>
             <organization>CSIRO Earth Science and Resource Engineering</organization>
             <roles>
-                <role>Module Maintainer</role>
                 <role>Java Developer</role>
             </roles>
             <timezone>8</timezone>
         </developer>
     </developers>
 
-    <dependencies>
+    <dependencies>      
+	<dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-complex</artifactId>
+            <version>${project.version}</version>
+        </dependency> 
+	<dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-complex</artifactId>
+            <version>${project.version}</version>
+	    <classifier>tests</classifier>
+        </dependency>
         <dependency>
             <groupId>commons-digester</groupId>
             <artifactId>commons-digester</artifactId>
@@ -76,7 +86,11 @@
             <artifactId>commons-beanutils</artifactId>
             <version>1.7.0</version>
         </dependency>
-
+        <dependency>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+        </dependency>
+		
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-data</artifactId>
@@ -109,8 +123,13 @@
         </dependency>
         <dependency>
             <groupId>xpp3</groupId>
-            <artifactId>xpp3</artifactId>
-        </dependency>
+            <artifactId>xpp3_min</artifactId>
+        </dependency>	
+	<dependency>
+	  <groupId>org.geotools.ogc</groupId>
+	  <artifactId>net.opengis.wfs</artifactId>
+	  <version>${project.version}</version>
+	</dependency>
         <dependency>
             <!-- for FilenameUtils -->
             <groupId>commons-io</groupId>
@@ -170,6 +189,12 @@
             <groupId>org.geotools.schemas</groupId>
             <artifactId>geosciml-3.0-seegrid</artifactId>
             <version>3.0.0-1</version>
+            <scope>test</scope>
+	    </dependency>
+	    <dependency>
+            <groupId>org.geotools.schemas</groupId>
+            <artifactId>geosciml-3.2</artifactId>
+            <version>3.2.0-1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

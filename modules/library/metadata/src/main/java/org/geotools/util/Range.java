@@ -17,9 +17,11 @@
 package org.geotools.util;
 
 import java.io.Serializable;
+
 import javax.measure.unit.Unit;
-import org.geotools.resources.i18n.Errors;
+
 import org.geotools.resources.i18n.ErrorKeys;
+import org.geotools.resources.i18n.Errors;
 
 
 /**
@@ -298,9 +300,9 @@ public class Range<T extends Comparable<? super T>> implements Serializable  {
      * Implementation of {@link #contains(T)} to be invoked directly by subclasses.
      * "NC" stands for "No Cast" - this method do not try to cast the value to a compatible type.
      */
-    final boolean containsNC(final T value) {
+    final boolean containsNC(final Comparable value) {
         if (minValue != null) {
-            final int c = minValue.compareTo(value);
+            final int c = minValue.compareTo((T)value);
             if (c >= 0) {
                 if (c != 0 || !isMinIncluded) {
                     return false;
@@ -308,7 +310,7 @@ public class Range<T extends Comparable<? super T>> implements Serializable  {
             }
         }
         if (maxValue != null) {
-            final int c = maxValue.compareTo(value);
+            final int c = maxValue.compareTo((T)value);
             if (c <= 0) {
                 if (c != 0 || !isMaxIncluded) {
                     return false;
@@ -358,8 +360,9 @@ public class Range<T extends Comparable<? super T>> implements Serializable  {
      * "NC" stands for "No Cast" - this method do not try to cast the value to a compatible type.
      */
     final boolean intersectsNC(final Range<? extends T> range) {
-        return compareMinTo(range.maxValue, range.isMaxIncluded ? 0 : -1) <= 0 &&
-               compareMaxTo(range.minValue, range.isMinIncluded ? 0 : +1) >= 0;
+        return !isEmpty() && !range.isEmpty()
+                && compareMinTo(range.maxValue, range.isMaxIncluded ? 0 : -1) <= 0
+                && compareMaxTo(range.minValue, range.isMinIncluded ? 0 : +1) >= 0;
     }
 
     /**

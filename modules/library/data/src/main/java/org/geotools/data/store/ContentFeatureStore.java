@@ -34,6 +34,7 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureStore;
 import org.geotools.factory.Hints;
 import org.geotools.feature.FeatureCollection;
+import org.geotools.feature.FeatureIterator;
 import org.geotools.feature.NameImpl;
 import org.geotools.filter.identity.FeatureIdImpl;
 import org.opengis.feature.simple.SimpleFeature;
@@ -150,7 +151,7 @@ public abstract class ContentFeatureStore extends ContentFeatureSource implement
             writer = getWriterInternal(query, flags);
 
             // events
-            if (canTransact() && !canEvent()){
+            if (!canEvent()){
                 writer = new EventContentFeatureWriter(this, writer );
             }
             // filtering
@@ -182,19 +183,20 @@ public abstract class ContentFeatureStore extends ContentFeatureSource implement
      *   <li>reprojection</li>
      *   <li>filtering</li>
      *   <li>max feature limiting</li>
-     *   <li>sorting<li>
-     *   <li>locking<li>
+     *   <li>sorting</li>
+     *   <li>locking</li>
      * </ul>
      * Then it <b>*must*</b> set the corresponding flags to <code>true</code>:
      * <ul>
      *   <li>{@link #canReproject()}</li>
      *   <li>{@link #canFilter()}</li>
      *   <li>{@link #canLimit()}</li>
-     *   <li>{@link #canSort()}<li>
-     *   <li>{@link #canLock()}<li>
+     *   <li>{@link #canSort()}</li>
+     *   <li>{@link #canLock()}</li>
      * </ul>
      * </p>
-     * 
+     * @param query Query
+     * @param flags See {@link #WRITER_ADD} and {@link #WRITER_UPDATE}
      */
     protected abstract FeatureWriter<SimpleFeatureType, SimpleFeature> getWriterInternal( Query query, int flags ) 
         throws IOException;
@@ -207,7 +209,7 @@ public abstract class ContentFeatureStore extends ContentFeatureSource implement
      * is written its id is obtained and added to the returned set.
      * </p>
      */
-    public final List<FeatureId> addFeatures(Collection collection)
+    public List<FeatureId> addFeatures(Collection collection)
         throws IOException {
         
         // gather up id's
@@ -231,14 +233,15 @@ public abstract class ContentFeatureStore extends ContentFeatureSource implement
      * <p>
      * This method calls through to {@link #addFeatures(Collection)}.
      * </p>
+     * @param featureCollection
      */
-    public final List<FeatureId> addFeatures(FeatureCollection<SimpleFeatureType,SimpleFeature> collection)
+    public List<FeatureId> addFeatures(FeatureCollection<SimpleFeatureType,SimpleFeature> featureCollection)
         throws IOException {
         // gather up id's
         List<FeatureId> ids = new LinkedList<FeatureId>();
         
         FeatureWriter<SimpleFeatureType, SimpleFeature> writer = getWriterAppend();
-        Iterator f = collection.iterator();
+        FeatureIterator<SimpleFeature> f = featureCollection.features();
         try {
             while (f.hasNext()) {
                 SimpleFeature feature = (SimpleFeature) f.next();
@@ -247,7 +250,7 @@ public abstract class ContentFeatureStore extends ContentFeatureSource implement
             }
         } finally {
             writer.close();
-            collection.close( f );
+            f.close();
         }        
         return ids;
     }

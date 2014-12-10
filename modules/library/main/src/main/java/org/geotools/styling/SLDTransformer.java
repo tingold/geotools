@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -37,7 +39,7 @@ import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.filter.FilterTransformer;
 import org.geotools.gml.producer.FeatureTransformer;
 import org.geotools.referencing.CRS;
-import org.geotools.util.Converters;
+import org.geotools.util.GrowableInternationalString;
 import org.geotools.xml.transform.TransformerBase;
 import org.geotools.xml.transform.Translator;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -45,13 +47,14 @@ import org.opengis.filter.Filter;
 import org.opengis.filter.FilterFactory;
 import org.opengis.filter.FilterFactory2;
 import org.opengis.filter.expression.Expression;
+import org.opengis.filter.expression.Function;
 import org.opengis.filter.expression.Literal;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.referencing.ReferenceIdentifier;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.style.ContrastMethod;
-import org.opengis.style.LabelPlacement;
 import org.opengis.style.SemanticType;
+import org.opengis.util.InternationalString;
 import org.xml.sax.Attributes;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
@@ -228,6 +231,33 @@ public class SLDTransformer extends TransformerBase {
         void element(String element, Expression expr) {
             element(element, expr, null);
         }
+        
+        /**
+         * Utility method used to quickly package up the provided InternationalString.
+         * @param element
+         * @param expr
+         */
+        void element(String element, InternationalString intString) {
+            if(intString instanceof GrowableInternationalString) {
+                GrowableInternationalString growable = (GrowableInternationalString) intString;
+                if(growable.getLocales().isEmpty()) {
+                    element(element, intString.toString());
+                } else {
+                    start(element);
+                    chars(intString.toString());
+                    for(Locale locale : growable.getLocales()) {
+                        if(locale != null) {
+                            AttributesImpl atts = new AttributesImpl();
+                            atts.addAttribute("", "lang", "lang", "", locale.toString());                        
+                            element("Localized", growable.toString(locale),atts );
+                        }
+                    }
+                    end(element);
+                }
+            } else {
+                element(element, intString.toString());
+            }
+        }
 
         /**
          * Utility method used to quickly package up the provided expression.
@@ -262,6 +292,31 @@ public class SLDTransformer extends TransformerBase {
             end(element);
         }
         
+        void labelContent(Expression expr) {
+            if(expr instanceof Literal) {
+                Literal literalLabel = ((Literal) expr);
+                String label = literalLabel.evaluate(null, String.class);
+                if(label != null) {
+                    // do we need a CDATA expansion?
+                    if(label.matches("^\\s+.*$|^.*\\s+$|^.*\\s{2,}.*$")) {
+                        cdata(label);
+                    } else {
+                        chars(label);
+                    }
+                }
+            } else if(expr instanceof Function && 
+                    ("strConcat".equals(((Function) expr).getName()) 
+                            || "concat".equals(((Function) expr).getName())
+                            || "Concatenate".equals(((Function) expr).getName()))) {
+                List<Expression> parameters = ((Function) expr).getParameters();
+                for (Expression parameter : parameters) {
+                    labelContent(parameter);
+                }
+            } else {
+                filterTranslator.encode(expr);
+            }
+        }
+        
         /**
          * To be used when the expression is a single literal whose 
          * value must be written out as element.
@@ -286,8 +341,11 @@ public class SLDTransformer extends TransformerBase {
         public void visit(PointPlacement pp) {
             start("LabelPlacement");
             start("PointPlacement");
-            pp.getAnchorPoint().accept(this);
-            
+
+            if (pp.getAnchorPoint() != null) {
+                pp.getAnchorPoint().accept(this);
+            }
+
             visit( pp.getDisplacement() );
 
             encodeValue("Rotation", null, pp.getRotation(), Double.valueOf(0.0));
@@ -366,7 +424,9 @@ public class SLDTransformer extends TransformerBase {
             encodeGeometryExpression(text.getGeometry());
 
             if (text.getLabel() != null) {
-                element("Label", text.getLabel());
+                start("Label");
+                labelContent(text.getLabel());
+                end("Label");
             }
 
             if ((text.getFonts() != null) && (text.getFonts().length != 0)) {
@@ -524,9 +584,9 @@ public class SLDTransformer extends TransformerBase {
                 if(!"ramp".equals(typeString)) {
                     atts.addAttribute("", "type", "type", "", typeString);
                 }
-                
-                if(colorMap.getExtendedColors()) {
-                    atts.addAttribute("", "extended", "extended", "", typeString);
+                final boolean extended = colorMap.getExtendedColors();
+                if(extended) {
+                    atts.addAttribute("", "extended", "extended", "", ""+extended);
                 }
 
                 start("ColorMap", atts);
@@ -593,9 +653,9 @@ public class SLDTransformer extends TransformerBase {
             start("ExternalGraphic");
 
             AttributesImpl atts = new AttributesImpl();
-        	atts.addAttribute(XMLNS_NAMESPACE, "xlink", "xmlns:xlink", "", XLINK_NAMESPACE);
+            atts.addAttribute(XMLNS_NAMESPACE, "xlink", "xmlns:xlink", "", XLINK_NAMESPACE);
             atts.addAttribute(XLINK_NAMESPACE, "type", "xlink:type", "", "simple");
-            atts.addAttribute(XLINK_NAMESPACE, "xlink", "xlink:href","", exgr.getOnlineResource().getLinkage().toString());
+            atts.addAttribute(XLINK_NAMESPACE, "xlink", "xlink:href", "", exgr.getURI());
             element("OnlineResource", (String) null, atts);
 
             element("Format", exgr.getFormat());
@@ -643,9 +703,13 @@ public class SLDTransformer extends TransformerBase {
 
         public void visit(Rule rule) {
             start("Rule");
-            if (rule.getName() != null) element("Name", rule.getName());
-            if (rule.getTitle() != null) element("Title", rule.getTitle());
-            if (rule.getAbstract() != null) element("Abstract", rule.getAbstract());
+            if (rule.getName() != null) element("Name", rule.getName());            
+            if (rule.getDescription() != null
+                    && rule.getDescription().getTitle() != null)
+                element("Title", rule.getDescription().getTitle());
+            if (rule.getDescription() != null
+                    && rule.getDescription().getAbstract() != null)
+                element("Abstract", rule.getDescription().getAbstract());
 
             Graphic[] gr = rule.getLegendGraphic();
             for (int i = 0; i < gr.length; i++) {
@@ -687,7 +751,7 @@ public class SLDTransformer extends TransformerBase {
         public void visit(Mark mark) {
             start("Mark");
             if (mark.getWellKnownName() != null && !"square".equals(mark.getWellKnownName().evaluate(null))) {
-            	element("WellKnownName", mark.getWellKnownName().toString());
+                encodeValue("WellKnownName", null, mark.getWellKnownName(), null);
             }
 
             if (mark.getFill() != null) {
@@ -746,7 +810,12 @@ public class SLDTransformer extends TransformerBase {
             element("Opacity", gr.getOpacity(), 1.0);
             element("Size", gr.getSize());
             element("Rotation", gr.getRotation(), 0.0);
-            visit(gr.getDisplacement());
+            if (gr.getAnchorPoint() != null) {
+                visit(gr.getAnchorPoint());
+            }
+            if (gr.getDisplacement() != null) {
+                visit(gr.getDisplacement());
+            }
 
             end("Graphic");
         }
@@ -962,11 +1031,16 @@ public class SLDTransformer extends TransformerBase {
             } else {
                 start("UserStyle");
                 element("Name", style.getName());
-                element("Title", style.getTitle());
+                if (style.getDescription() != null
+                        && style.getDescription().getTitle() != null)
+                    element("Title", style.getDescription().getTitle());
+                
                 if(style.isDefault()) {
                     element("IsDefault", "1");
                 }
-                elementSafe("Abstract", style.getAbstract());
+                if (style.getDescription() != null
+                        && style.getDescription().getAbstract() != null)
+                    element("Abstract", style.getDescription().getAbstract());
                 FeatureTypeStyle[] fts = style.getFeatureTypeStyles();
                 for (int i = 0; i < fts.length; i++) {
                     visit(fts[i]);
@@ -982,16 +1056,20 @@ public class SLDTransformer extends TransformerBase {
                 element("Name", fts.getName());
             }
 
-            if ((fts.getTitle() != null) && (fts.getTitle().length() > 0)) {
-                element("Title", fts.getTitle());
-            }
-
-            if ((fts.getAbstract() != null) && (fts.getAbstract().length() > 0)) {
-                element("Abstract", fts.getAbstract());
-            }
-
+            if (fts.getDescription() != null
+                    && fts.getDescription().getTitle() != null)
+                element("Title", fts.getDescription().getTitle());
+            if (fts.getDescription() != null
+                    && fts.getDescription().getAbstract() != null)
+                element("Abstract", fts.getDescription().getAbstract());
+            
+            
             if ((fts.featureTypeNames() != null) && (fts.featureTypeNames().size() > 0)) {
                 element("FeatureTypeName", fts.featureTypeNames().iterator().next().toString());
+            }
+            
+            if (fts.getTransformation() != null) {
+                element("Transformation", fts.getTransformation());
             }
 
             String[] sti = fts.getSemanticTypeIdentifiers();
@@ -1186,7 +1264,7 @@ public class SLDTransformer extends TransformerBase {
 			}
 			
 			//gamma
-			Expression exp = (Literal)ce.getGammaValue();
+			Expression exp = ce.getGammaValue();
 			if (exp != null) {
 				//gamma is a double so the actual value needs to be printed here
 				element("GammaValue",  ((Literal)exp).getValue().toString());

@@ -20,7 +20,7 @@ package org.geotools.data.complex.filter;
 import java.util.List;
 
 import org.geotools.data.complex.FeatureTypeMapping;
-import org.geotools.data.complex.filter.XPath.StepList;
+import org.geotools.data.complex.filter.XPathUtil.StepList;
 import org.geotools.filter.FilterCapabilities;
 import org.geotools.filter.visitor.PostPreProcessFilterSplittingVisitor;
 import org.opengis.filter.Id;
@@ -132,19 +132,25 @@ public class ComplexFilterSplitter extends PostPreProcessFilterSplittingVisitor 
             return null;
         }
         
-        List<Expression> matchingMappings = mappings.findMappingsFor(exprSteps);
+        List<Expression> matchingMappings = mappings.findMappingsFor(exprSteps, false);
 
         if (matchingMappings.isEmpty()) {
             postStack.push(expression);
             return null;
         } else {
             for (Expression expr : matchingMappings) {
-                CapabilitiesExpressionVisitor visitor = new CapabilitiesExpressionVisitor();
-                expr.accept(visitor, null);
-
-                if (!visitor.isCapable()) {
+                if (expr == null) {
+                    // this is joining for simple content
+                    // has to go to post stack because it comes from another table
                     postStack.push(expression);
                     return null;
+                } else {
+                    CapabilitiesExpressionVisitor visitor = new CapabilitiesExpressionVisitor();
+                    expr.accept(visitor, null);
+                    if (!visitor.isCapable()) {
+                        postStack.push(expression);
+                        return null;
+                    }
                 }
             }
         }

@@ -22,6 +22,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
 
+import java.util.TimeZone;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 
@@ -102,7 +103,7 @@ public class TemporalConverterFactoryTest extends TestCase {
 	}
 	
 	public void testCalendarToTime() throws Exception {
-		Calendar calendar = Calendar.getInstance();
+		Calendar calendar = Calendar.getInstance( TimeZone.getTimeZone("GMT") );
 		calendar.clear();
 		calendar.set(Calendar.HOUR_OF_DAY, 17);
 		calendar.set(Calendar.MINUTE, 0);
@@ -283,4 +284,12 @@ public class TemporalConverterFactoryTest extends TestCase {
             
             assertEquals( date, gc.toGregorianCalendar().getTime() );
 	}
+    
+    public void testTimeZoneToString() throws Exception {
+        Converter converter = factory.createConverter(TimeZone.class, String.class, null);
+        assertNotNull(converter);
+
+        assertEquals(TimeZone.getDefault().getID(), converter.convert(TimeZone.getDefault(), String.class));
+        assertNull(converter.convert(null,String.class));
+    }
 }

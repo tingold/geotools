@@ -17,13 +17,19 @@
 package org.geotools.styling;
 
 import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+
+import javax.imageio.ImageIO;
+import javax.swing.Icon;
 
 import junit.framework.Test;
 import junit.framework.TestCase;
@@ -32,9 +38,7 @@ import junit.framework.TestSuite;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.factory.GeoTools;
 import org.geotools.filter.function.FilterFunction_buffer;
-import org.geotools.filter.function.FilterFunction_strConcat;
 import org.geotools.test.TestData;
-import org.opengis.filter.BinaryLogicOperator;
 import org.opengis.filter.Filter;
 import org.opengis.filter.FilterFactory;
 import org.opengis.filter.Id;
@@ -44,13 +48,12 @@ import org.opengis.filter.expression.Expression;
 import org.opengis.filter.expression.Function;
 import org.opengis.filter.expression.Literal;
 import org.opengis.filter.expression.PropertyName;
-import org.opengis.filter.spatial.BinarySpatialOperator;
 import org.opengis.filter.spatial.Disjoint;
+import org.opengis.style.GraphicalSymbol;
 
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.Polygon;
-
 
 /**
  * Try out our SLD parser and see how well it does.
@@ -119,7 +122,7 @@ public class SLDStyleTest extends TestCase {
         Rule rule = fts.getRules()[0];
         LineSymbolizer lineSym = (LineSymbolizer) rule.getSymbolizers()[0];
         assertEquals(4,
-            ((Number) lineSym.getStroke().getWidth().evaluate( null, Number.class )).intValue());
+            lineSym.getStroke().getWidth().evaluate( null, Number.class ).intValue());
     }
 
     /**
@@ -138,6 +141,27 @@ public class SLDStyleTest extends TestCase {
         assertNotNull(xml);
         //we're content for the moment if this didn't throw an exception...
         //TODO: convert the buffer/resource to a string and compare
+    }
+    
+    /**
+     * XML --> SLD --> XML 
+     * @throws Exception
+     */
+    public void testSLDParserWithLocalizedTitle() throws Exception {
+        java.net.URL surl = TestData.getResource(this, "example-localized-sld.xml");
+        SLDParser stylereader = new SLDParser(sf, surl);
+        StyledLayerDescriptor sld = stylereader.parseSLD();
+        
+        //convert back to xml again
+        SLDTransformer aTransformer = new SLDTransformer();
+        String xml = aTransformer.transform(sld);
+
+        assertNotNull(xml);
+        assertTrue(xml.contains("<sld:Title>title"));
+        assertTrue(xml.contains("<sld:Localized lang=\""+Locale.ITALIAN.toString()+"\">titolo</sld:Localized>"));
+        assertTrue(xml.contains("<sld:Localized lang=\""+Locale.FRENCH.toString()+"\">titre</sld:Localized>"));
+        assertTrue(xml.contains("<sld:Localized lang=\""+Locale.CANADA_FRENCH.toString()+"\">titre</sld:Localized>"));
+        
     }
     
     public void testEmptyElements() throws Exception {
@@ -214,8 +238,8 @@ public class SLDStyleTest extends TestCase {
          Expression fill = polygon.getFill().getColor();
          Expression label = text.getLabel();
          
-         String fillValue = (String) fill.evaluate(null, String.class);
-         String labelValue = (String) label.evaluate(null, String.class);
+         String fillValue = fill.evaluate(null, String.class);
+         String labelValue = label.evaluate(null, String.class);
 
          assertEquals("#96C3F5", fillValue);
          assertEquals("this is a prefix; this is an expression; this is a postfix", labelValue);
@@ -246,7 +270,7 @@ public class SLDStyleTest extends TestCase {
          
          Expression label = text.getLabel();
          
-         String labelValue = (String) label.evaluate(null, String.class);
+         String labelValue = label.evaluate(null, String.class);
 
          assertEquals("literal_1\n cdata literal_2", labelValue);
     }
@@ -263,9 +287,28 @@ public class SLDStyleTest extends TestCase {
          
          Expression label = text.getLabel();
          
-         String labelValue = (String) label.evaluate(null, String.class);
+         String labelValue = label.evaluate(null, String.class);
 
          assertEquals("literal_1\nliteral_2", labelValue);
+    }
+
+    public void testSLDParserWithFuncConcatenateCDATASpaces() throws Exception {
+        java.net.URL surl = TestData.getResource(this, "funcConcatenateWithCDATASpaces.xml");
+         SLDParser stylereader = new SLDParser(sf, surl);
+         StyledLayerDescriptor sld = stylereader.parseSLD();
+         
+         Symbolizer[] symbolizers = ((NamedLayer) sld.getStyledLayers()[0]).getStyles()[0]
+                .getFeatureTypeStyles()[0].getRules()[0].getSymbolizers();
+
+         TextSymbolizer text = (TextSymbolizer) symbolizers[0];
+         
+         Expression label = text.getLabel();
+         
+         String labelValue = label.evaluate(null, String.class);
+         
+         // System.out.println(labelValue);
+
+         assertEquals("literal_1\n literal_2", labelValue);
     }
     
     public void testStrokeCssParameter() throws Exception {
@@ -572,6 +615,33 @@ public class SLDStyleTest extends TestCase {
         assertTrue(ts.getOtherText().getText() instanceof Literal);
     }
     
+    public void testParseAnchorDisplacement() throws IOException {
+        StyleFactory factory = CommonFactoryFinder.getStyleFactory(null);
+        java.net.URL surl = TestData.getResource(this, "markDisplacementTest.sld");
+        SLDParser stylereader = new SLDParser(factory, surl);
+
+        // basic checks
+        Style[] styles = stylereader.readXML();
+        PointSymbolizer ps = (PointSymbolizer) styles[0].featureTypeStyles().get(0).rules().get(0)
+                .getSymbolizers()[0];
+        Graphic graphic = ps.getGraphic();
+        Displacement displacement = graphic.getDisplacement();
+        assertNotNull(displacement);
+        assertLiteral(11, displacement.getDisplacementX());
+        assertLiteral(8, displacement.getDisplacementY());
+
+        AnchorPoint anchorPoint = graphic.getAnchorPoint();
+        assertNotNull(displacement);
+        assertLiteral(0, anchorPoint.getAnchorPointX());
+        assertLiteral(1, anchorPoint.getAnchorPointY());
+    }
+
+    private void assertLiteral(double expected, Expression exp) {
+        assertTrue(exp instanceof Literal);
+        double value = exp.evaluate(null, Double.class);
+        assertEquals(expected, value, 0d);
+    }
+
     /**
      * Tests the parsing of a raster symbolizer sld
      * @throws IOException
@@ -649,7 +719,7 @@ public class SLDStyleTest extends TestCase {
          RasterSymbolizer rs = (RasterSymbolizer)r.getSymbolizers()[0];
          
          //opacity         
-         Double d = (Double)rs.getOpacity().evaluate(null, Double.class);
+         Double d = rs.getOpacity().evaluate(null, Double.class);
          assertEquals(1.0, d.doubleValue());
                 
          //overlap behaviour
@@ -666,7 +736,7 @@ public class SLDStyleTest extends TestCase {
          for (int i = 0; i < centeries.length; i++) {
 			ColorMapEntry entry = centeries[i];
 			String c = (String) entry.getColor().evaluate(null);
-			Integer q = (Integer) entry.getQuantity().evaluate(null, Integer.class);
+			Integer q = entry.getQuantity().evaluate(null, Integer.class);
 			assertEquals(colors[i], c);
 			assertEquals(values[i], q.intValue());
 		}
@@ -733,5 +803,85 @@ public class SLDStyleTest extends TestCase {
         assertNotNull(fts.getTransformation());
         Function tx = (Function) fts.getTransformation();
         assertEquals("union", tx.getName());
+    }
+
+    public void testParseBase64EncodedContent() throws Exception {
+        ExternalGraphic graphic = getGraphic("base64.sld");
+        assertNotNull(graphic.getInlineContent());
+        assertEquals("image/png", graphic.getFormat());
+        assertNull(graphic.getLocation());
+        assertImagesEqual(getReferenceImage("test.png"), graphic.getInlineContent());
+    }
+
+    public void testInvalidInlineContent() throws Exception {
+        ExternalGraphic graphic = getGraphic("invalid-content.sld");
+        assertNotNull(graphic.getInlineContent());
+        assertEquals("image/png", graphic.getFormat());
+        assertNull(graphic.getLocation());
+        assertEquals(1, graphic.getInlineContent().getIconWidth());
+        assertEquals(1, graphic.getInlineContent().getIconHeight());
+    }
+
+    public void testUnsuppotedInlineContentEncoding() throws Exception {
+        ExternalGraphic graphic = getGraphic("unsupported-encoding.sld");
+        assertNotNull(graphic.getInlineContent());
+        assertEquals("image/svg", graphic.getFormat());
+        assertNull(graphic.getLocation());
+        assertEquals(1, graphic.getInlineContent().getIconWidth());
+        assertEquals(1, graphic.getInlineContent().getIconHeight());
+    }
+
+    private BufferedImage getReferenceImage(String resourceName) throws IOException {
+        URL url = TestData.getResource(this, resourceName);
+        return ImageIO.read(url);
+    }
+
+    private ExternalGraphic getGraphic(String resourceName) throws IOException {
+        URL surl = TestData.getResource(this, resourceName);
+        SLDParser stylereader = new SLDParser(sf, surl);
+
+        Style[] styles = stylereader.readXML();
+        assertEquals(1, styles.length);
+        assertEquals(1, styles[0].featureTypeStyles().size());
+        assertEquals(1, styles[0].featureTypeStyles().get(0).rules().size());
+
+        Rule r = styles[0].featureTypeStyles().get(0).rules().get(0);
+        assertEquals(1, r.getSymbolizers().length);
+        
+        PolygonSymbolizer symbolizer = (PolygonSymbolizer)r.getSymbolizers()[0];
+
+        Fill fill = symbolizer.getFill();
+        assertNotNull(fill);
+
+        Graphic graphicFill = fill.getGraphicFill();
+        assertNotNull(graphicFill);
+        
+        assertEquals(1, graphicFill.graphicalSymbols().size());
+
+        GraphicalSymbol symbol = graphicFill.graphicalSymbols().get(0);
+        assertTrue(symbol instanceof ExternalGraphic);
+        return (ExternalGraphic) symbol;
+    }
+
+    private static void assertImagesEqual(BufferedImage expected, Icon icon) {
+        BufferedImage actual = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = actual.createGraphics();
+        try {
+            icon.paintIcon(null, g, 0, 0);
+        }
+        finally {
+            g.dispose();
+        }
+        
+        assertNotNull(expected);
+        assertEquals(expected.getWidth(), actual.getWidth());
+        assertEquals(expected.getHeight(), actual.getHeight());
+        int w = actual.getWidth();
+        int h = actual.getHeight();
+        for (int x = 0; x < w; ++x) {
+            for (int y = 0; y < h; ++y) {
+                assertEquals("mismatch at (" + x + ", " + y + ")", actual.getRGB(x, y), expected.getRGB(x, y));
+            }
+        }
     }
 }

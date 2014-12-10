@@ -39,8 +39,32 @@
     </xsd:complexType>
   </xsd:element>
   <xsd:element name="Name" type="xsd:string"/>
-  <xsd:element name="Title" type="xsd:string"/>
-  <xsd:element name="Abstract" type="xsd:string"/>
+  <xsd:element name="Title" type="sld:InternationalStringType"/>
+  
+  <xsd:element name="Abstract" type="sld:InternationalStringType"/>
+  
+  <xsd:complexType name="InternationalStringType" mixed="true">
+    <xsd:annotation>
+      <xsd:documentation>
+        The "InternationalStringType" contains localized elements for the
+        container element.  A "mixed" element-content
+        model is used with localized value elements and default text value.
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:sequence minOccurs="0" maxOccurs="unbounded">        
+      <xsd:element ref="sld:Localized"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  
+  <xsd:element name="Localized">
+    <xsd:complexType>
+      <xsd:simpleContent>
+          <xsd:extension base="xsd:string">
+             <xsd:attribute name="lang" type="xsd:string" />
+          </xsd:extension>
+      </xsd:simpleContent>
+    </xsd:complexType>    
+  </xsd:element>
 
 <!-- *********************************************************************** -->
   <xsd:annotation>
@@ -238,12 +262,27 @@
         <xsd:element ref="sld:FeatureTypeName" minOccurs="0"/>
         <xsd:element ref="sld:SemanticTypeIdentifier" minOccurs="0"
                     maxOccurs="unbounded"/>
+        <xsd:element ref="sld:Transformation" minOccurs="0"/>
         <xsd:element ref="sld:Rule" maxOccurs="unbounded"/>
       </xsd:sequence>
     </xsd:complexType>
   </xsd:element>
   <xsd:element name="SemanticTypeIdentifier" type="xsd:string"/>
 
+  <xsd:element name="Transformation">
+    <xsd:annotation>
+      <xsd:documentation>
+        A Transformation specifies a Rendering Transformation 
+        to be applied to the input data before styling.
+      </xsd:documentation>
+    </xsd:annotation>
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="ogc:Function"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+  
   <xsd:element name="Rule">
     <xsd:annotation>
       <xsd:documentation>
@@ -319,6 +358,7 @@
           <xsd:sequence>
             <xsd:element ref="sld:Geometry" minOccurs="0"/>
             <xsd:element ref="sld:Stroke" minOccurs="0"/>
+            <xsd:element ref="sld:VendorOption" minOccurs="0" maxOccurs="unbounded" />
           </xsd:sequence>
         </xsd:extension>
       </xsd:complexContent>
@@ -440,6 +480,7 @@
             <xsd:element ref="sld:Geometry" minOccurs="0"/>
             <xsd:element ref="sld:Fill" minOccurs="0"/>
             <xsd:element ref="sld:Stroke" minOccurs="0"/>
+            <xsd:element ref="sld:VendorOption" minOccurs="0" maxOccurs="unbounded" />
           </xsd:sequence>
         </xsd:extension>
       </xsd:complexContent>
@@ -482,6 +523,7 @@
           <xsd:sequence>
             <xsd:element ref="sld:Geometry" minOccurs="0"/>
             <xsd:element ref="sld:Graphic" minOccurs="0"/>
+            <xsd:element ref="sld:VendorOption" minOccurs="0" maxOccurs="unbounded" />
           </xsd:sequence>
         </xsd:extension>
       </xsd:complexContent>
@@ -505,6 +547,8 @@
           <xsd:element ref="sld:Opacity" minOccurs="0"/>
           <xsd:element ref="sld:Size" minOccurs="0"/>
           <xsd:element ref="sld:Rotation" minOccurs="0"/>
+          <xsd:element ref="sld:AnchorPoint" minOccurs="0"/>
+          <xsd:element ref="sld:Displacement" minOccurs="0"/>
         </xsd:sequence>
       </xsd:sequence>
     </xsd:complexType>
@@ -754,6 +798,7 @@
             <xsd:element ref="sld:ContrastEnhancement" minOccurs="0"/>
             <xsd:element ref="sld:ShadedRelief" minOccurs="0"/>
             <xsd:element ref="sld:ImageOutline" minOccurs="0"/>
+            <xsd:element ref="sld:VendorOption" minOccurs="0" maxOccurs="unbounded" />
           </xsd:sequence>
         </xsd:extension>
       </xsd:complexContent>

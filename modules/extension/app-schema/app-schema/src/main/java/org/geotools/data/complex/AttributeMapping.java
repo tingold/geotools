@@ -20,7 +20,7 @@ package org.geotools.data.complex;
 import java.util.Collections;
 import java.util.Map;
 
-import org.geotools.data.complex.filter.XPath.StepList;
+import org.geotools.data.complex.filter.XPathUtil.StepList;
 import org.geotools.util.Utilities;
 import org.opengis.feature.type.AttributeType;
 import org.opengis.feature.type.Name;
@@ -46,6 +46,10 @@ public class AttributeMapping {
     protected StepList targetXPath;
 
     private boolean isMultiValued;
+    
+    private boolean encodeIfEmpty;
+    
+    private boolean isList;
 
     /**
      * If present, represents our way to deal polymorphic attribute instances, so this node should
@@ -61,6 +65,8 @@ public class AttributeMapping {
 
     private String instancePath;
 
+    private String sourceIndex;
+
     /**
      * Creates a new AttributeMapping object.
      * 
@@ -71,10 +77,10 @@ public class AttributeMapping {
      */
     public AttributeMapping(Expression idExpression, Expression sourceExpression,
             StepList targetXPath) {
-        this(idExpression, sourceExpression, targetXPath, null, false, null);
+        this(idExpression, sourceExpression, null, targetXPath, null, false, null);
     }
 
-    public AttributeMapping(Expression idExpression, Expression sourceExpression,
+    public AttributeMapping(Expression idExpression, Expression sourceExpression, String sourceIndex,
             StepList targetXPath, AttributeType targetNodeInstance, boolean isMultiValued,
             Map<Name, Expression> clientProperties) {
 
@@ -84,6 +90,7 @@ public class AttributeMapping {
         if (this.sourceExpression == null) {
             this.sourceExpression = Expression.NIL;
         }
+        this.sourceIndex = sourceIndex;
         this.targetXPath = targetXPath;
         this.targetNodeInstance = targetNodeInstance;
         this.clientProperties = clientProperties == null ? Collections
@@ -93,9 +100,21 @@ public class AttributeMapping {
     public boolean isMultiValued() {
         return isMultiValued;
     }
+    
+    public boolean encodeIfEmpty() {
+        return encodeIfEmpty;
+    }
+    
+    public boolean isList() {
+        return isList;
+    }
 
     public Expression getSourceExpression() {
         return sourceExpression;
+    }
+    
+    public String getSourceIndex() {
+        return sourceIndex;
     }
 
     public StepList getTargetXPath() {
@@ -142,6 +161,14 @@ public class AttributeMapping {
         this.instancePath = instancePath;
     }
     
+    public void setEncodeIfEmpty(boolean encodeIfEmpty) {
+        this.encodeIfEmpty = encodeIfEmpty;
+    }
+    
+    public void setList(boolean isList) {
+        this.isList = isList;
+    }
+    
     /********END specific web service methods*******************/
     
     @Override
@@ -160,6 +187,9 @@ public class AttributeMapping {
                 && Utilities.equals(sourceExpression, other.sourceExpression)
                 && Utilities.equals(targetXPath, other.targetXPath)
                 && Utilities.equals(targetNodeInstance, other.targetNodeInstance)
+                && Utilities.equals(isList, other.isList)
+                && Utilities.equals(isMultiValued, other.isMultiValued)
+                && Utilities.equals(clientProperties, other.clientProperties)
                 && Utilities.equals(label, other.label)
                 && Utilities.equals(parentLabel, other.parentLabel);
     }

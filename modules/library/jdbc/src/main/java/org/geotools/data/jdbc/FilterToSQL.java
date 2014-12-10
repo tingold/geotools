@@ -16,6 +16,8 @@
  */
 package org.geotools.data.jdbc;
 
+import static org.geotools.filter.capability.FunctionNameImpl.parameter;
+
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -33,6 +35,7 @@ import org.geotools.factory.Hints;
 import org.geotools.filter.FilterCapabilities;
 import org.geotools.filter.FunctionImpl;
 import org.geotools.filter.LikeFilterImpl;
+import org.geotools.filter.capability.FunctionNameImpl;
 import org.geotools.jdbc.JDBCDataStore;
 import org.geotools.jdbc.JoinPropertyName;
 import org.geotools.jdbc.PrimaryKey;
@@ -194,6 +197,9 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
     
     /** the srid corresponding to the current binary spatial filter being encoded */
     protected Integer currentSRID;
+
+    /** The dimension corresponding to the current binary spatial filter being encoded */
+    protected Integer currentDimension;
 
     /** inline flag, controlling whether "WHERE" will prefix the SQL encoded filter */
     protected boolean inline = false;
@@ -551,9 +557,15 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
      */
     public Object visit(Not filter, Object extraData) {
         try {
-            out.write("NOT (");
-            filter.getFilter().accept(this, extraData);
-            out.write(")");
+            if(filter.getFilter() instanceof PropertyIsNull) {
+                Expression expr = ((PropertyIsNull) filter.getFilter()).getExpression();
+                expr.accept(this, extraData);
+                out.write(" IS NOT NULL ");
+            } else {
+                out.write("NOT (");
+                filter.getFilter().accept(this, extraData);
+                out.write(")");
+            }
             return extraData;
         }
         catch(IOException e) {
@@ -709,11 +721,24 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
                 rightContext = attType.getType().getBinding();
             }
         }
+        else if (left instanceof Function) {
+            //check for a function return type
+            Class ret = getFunctionReturnType((Function)left);
+            if (ret != null) {
+                rightContext = ret;
+            }
+        }
         
         if (right instanceof PropertyName) {
             AttributeDescriptor attType = (AttributeDescriptor)right.evaluate(featureType);
             if (attType != null) {
                 leftContext = attType.getType().getBinding();
+            }
+        }
+        else if (right instanceof Function){
+            Class ret = getFunctionReturnType((Function)right);
+            if (ret != null) {
+                leftContext = ret;
             }
         }
 
@@ -735,14 +760,32 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
 
         try {
             if ( matchCase ) {
-                left.accept(this, leftContext);
+                if (leftContext != null && isBinaryExpression(left)) {
+                    writeBinaryExpression(left, leftContext);
+                }
+                else {
+                    left.accept(this, leftContext);
+                }
+                
                 out.write(" " + type + " ");
-                right.accept(this, rightContext);
+
+                if (rightContext != null && isBinaryExpression(right)) {
+                    writeBinaryExpression(right, rightContext);
+                }
+                else {
+                    right.accept(this, rightContext);
+                }
             }
             else {
-                //wrap both sides in "lower"
-                FunctionImpl f = new FunctionImpl(); 
-                f.setName( "lower" );
+                // wrap both sides in "lower"
+                FunctionImpl f = new FunctionImpl() {
+                    {
+                        functionName = new FunctionNameImpl("lower",
+                                parameter("lowercase", String.class),
+                                parameter("string", String.class));
+                    }
+                };
+                f.setName("lower");
                 
                 f.setParameters(Arrays.asList(left));
                 f.accept(this, Arrays.asList(leftContext));
@@ -756,6 +799,47 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
         } catch (java.io.IOException ioe) {
             throw new RuntimeException(IO_ERROR, ioe);
         }
+    }
+
+    /*
+     * write out the binary expression and cast only the end result, not passing any context into
+     * encoding the individual parts
+     */
+    void writeBinaryExpression(Expression e, Class context) throws IOException {
+        Writer tmp = out;
+        try {
+            out = new StringWriter();
+            out.write("(");
+            e.accept(this, null);
+            out.write(")");
+            tmp.write(cast(out.toString(), context));
+        
+        }
+        finally {
+            out = tmp;
+        }
+    }
+
+    /*
+     * returns the return type of the function, or null if it could not be determined or is simply
+     * of return type Object.class
+     */
+    Class getFunctionReturnType(Function f) {
+        Class clazz = Object.class;
+        if (f.getFunctionName() != null && f.getFunctionName().getReturn() != null) {
+            clazz = f.getFunctionName().getReturn().getType();
+        }
+        if (clazz == Object.class) {
+            clazz = null;
+        }
+        return clazz;
+    }
+
+    /*
+     * determines if the function is a binary expression
+     */
+    boolean isBinaryExpression(Expression e) {
+        return e instanceof BinaryExpression;
     }
 
     /**
@@ -808,8 +892,11 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
             colNames[i] = mapper.getColumnName(i);
         }
 
-        for (Iterator i = ids.iterator(); i.hasNext(); ) {
-            try {
+        try {
+            if (ids.size() > 1) {
+                out.write("(");
+            }
+            for (Iterator i = ids.iterator(); i.hasNext();) {
                 Identifier id = (Identifier) i.next();
                 Object[] attValues = mapper.getPKAttributes(id.toString());
 
@@ -831,11 +918,15 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
                 if (i.hasNext()) {
                     out.write(" OR ");
                 }
-            } catch (java.io.IOException e) {
-                throw new RuntimeException(IO_ERROR, e);
             }
+            if (ids.size() > 1) {
+                out.write(")");
+            }
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(IO_ERROR, e);
         }
         
+
         return extraData;
     }
     
@@ -879,15 +970,15 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
         if (filter == null)
             throw new NullPointerException(
                     "Filter to be encoded cannot be null");
-        if (!(filter instanceof BinaryComparisonOperator))
+        if (!(filter instanceof BinarySpatialOperator))
             throw new IllegalArgumentException(
-                    "This filter is not a binary comparison, "
+                    "This filter is not a binary spatial operator, "
                             + "can't do SDO relate against it: "
                             + filter.getClass());
 
         
         // extract the property name and the geometry literal
-        BinaryComparisonOperator op = (BinaryComparisonOperator) filter;
+        BinarySpatialOperator op = (BinarySpatialOperator) filter;
         Expression e1 = op.getExpression1();
         Expression e2 = op.getExpression2();
 
@@ -900,6 +991,7 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
             // handle native srid
             currentGeometry = null;
             currentSRID = null;
+            currentDimension = null;
             if (featureType != null) {
                 // going thru evaluate ensures we get the proper result even if the
                 // name has
@@ -909,6 +1001,8 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
                     currentGeometry = (GeometryDescriptor) descriptor;
                     currentSRID = (Integer) descriptor.getUserData().get(
                             JDBCDataStore.JDBC_NATIVE_SRID);
+                    currentDimension = (Integer) descriptor.getUserData().get(
+                            Hints.COORDINATE_DIMENSION);
                 }
             }
         }
@@ -1261,13 +1355,27 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
         if(target != null) {
             // use the target type
             if (Number.class.isAssignableFrom(target)) {
-                literal = Converters.convert(expression.evaluate(null), target, 
-                        new Hints(ConverterFactory.SAFE_CONVERSION, true));    
+                literal = safeConvertToNumber(expression, target);
+
+                if (literal == null) {
+                    literal = safeConvertToNumber(expression, Number.class);
+                }
             }
             else {
                 literal = expression.evaluate(null, target);
             }
         }
+        
+        //check for conversion to number
+        if (target == null) {
+            // we don't know the target type, check for a conversion to a number
+            
+            Number number = safeConvertToNumber(expression, Number.class);
+            if (number != null) {
+                literal = number;
+            }
+        }
+        
         // if the target was not known, of the conversion failed, try the
         // type guessing dance literal expression does only for the following
         // method call
@@ -1279,6 +1387,14 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
             literal = expression.getValue();
         
         return literal;
+    }
+
+    /*
+     * helper to do a safe convesion of expression to a number
+     */
+    Number safeConvertToNumber(Expression expression, Class target) {
+        return (Number) Converters.convert(expression.evaluate(null), target, 
+                new Hints(ConverterFactory.SAFE_CONVERSION, true));
     }
 
     /**
@@ -1295,7 +1411,7 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
         } else if(literal instanceof Number || literal instanceof Boolean) {
             out.write(String.valueOf(literal));
         } else {
-            // we don't know what this is, let's convert back to a string
+            // we don't know the type...just convert back to a string
             String encoding = (String) Converters.convert(literal,
                     String.class, null);
             if (encoding == null) {
@@ -1423,7 +1539,9 @@ public class FilterToSQL implements FilterVisitor, ExpressionVisitor {
         if(params == null || params.size() <= idx) {
             if(mandatory) {
                 throw new IllegalArgumentException("Missing parameter number " + (idx + 1) 
-                        + "for function " + function.getName() + ", cannot encode in SQL");
+                        + " for function " + function.getName() + ", cannot encode in SQL");
+            } else {
+            	return null;
             }
         }
         return params.get(idx);

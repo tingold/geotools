@@ -18,12 +18,14 @@ package org.geotools.data.wfs;
 
 import java.net.URI;
 import java.net.URL;
+import java.util.Map;
 import java.util.Set;
 
 import javax.xml.namespace.QName;
 
 import org.geotools.data.DataAccess;
 import org.geotools.data.DataStore;
+import org.geotools.factory.Hints.ClassKey;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
@@ -41,6 +43,22 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
  *         /data/wfs/WFSDataStore.java $
  */
 public interface WFSDataStore extends DataStore {
+    
+    /**
+     * Provides the vendor parameters to be used in a query
+     *
+     * @since 2.7.5
+     */
+    public static final ClassKey WFS_VENDOR_PARAMETERS = new ClassKey(Map.class);
+    
+    /**
+     * Values for the AXIS_ORDER and AXIS_ORDER_FILTER connection parameters.
+     */
+    public static final String AXIS_ORDER_EAST_NORTH = "East / North";
+    public static final String AXIS_ORDER_NORTH_EAST = "North / East";
+    public static final String AXIS_ORDER_COMPLIANT = "Compliant";
+
+    
     /**
      * Overrides {@link DataAccess#getInfo()} so it type narrows to a {@link WFSServiceInfo}
      * 
@@ -92,4 +110,10 @@ public interface WFSDataStore extends DataStore {
     public boolean isPreferPostOverGet();
     
     public void setNamespaceOverride(String namespaceOverride);
+
+    /**
+     * @param useDefaultSRS
+     */
+    public void setUseDefaultSRS(Boolean useDefaultSRS);
+
 }

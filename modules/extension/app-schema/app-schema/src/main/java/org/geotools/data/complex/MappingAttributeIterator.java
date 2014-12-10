@@ -21,8 +21,8 @@ import java.io.IOException;
 import java.util.Iterator;
 
 import org.geotools.data.Query;
-import org.geotools.data.complex.filter.XPath.StepList;
-import org.geotools.feature.Types;
+import org.geotools.data.complex.filter.XPath;
+import org.geotools.data.complex.filter.XPathUtil.StepList;
 import org.opengis.feature.type.Name;
 /**
  * A Feature iterator that operates over the FeatureSource of a
@@ -48,8 +48,8 @@ public class MappingAttributeIterator extends DataAccessMappingFeatureIterator {
     private Name elementName;
 
     public MappingAttributeIterator(AppSchemaDataAccess store, FeatureTypeMapping mapping,
-            Query query, boolean isFiltered, Query unrolledQuery) throws IOException {
-        super(store, mapping, query, isFiltered, unrolledQuery);
+            Query query, Query unrolledQuery) throws IOException {
+        super(store, mapping, query, unrolledQuery, false);
         elementName = mapping.getTargetFeature().getName();
         checkAttributeMappings();
     }
@@ -62,13 +62,13 @@ public class MappingAttributeIterator extends DataAccessMappingFeatureIterator {
         while (mappings.hasNext()) {
             AttributeMapping att = mappings.next();
             StepList xpath = att.getTargetXPath();
-            if (Types.equals(elementName, xpath)) {
+            if (XPath.equals(elementName, xpath)) {
                 if (rootMapping != null) {
                     throw new RuntimeException("Duplicate AttributeMapping for: '" + elementName
                             + "' is found in FeatureTypeMapping '" + elementName + "'!");
                 }
                 rootMapping = att;
-            } else if (!Types.equals(ComplexFeatureConstants.FEATURE_CHAINING_LINK_NAME, xpath)) {
+            } else if (!XPath.equals(ComplexFeatureConstants.FEATURE_CHAINING_LINK_NAME, xpath)) {
                 // log warning
                 String msg = "AttributeMapping for: '" + xpath + "' found in FeatureTypeMapping '"
                         + elementName

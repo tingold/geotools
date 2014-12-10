@@ -3,14 +3,21 @@ package org.geotools.jdbc;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import org.geotools.data.FeatureSource;
 import org.geotools.data.FeatureStore;
 import org.geotools.data.Query;
+import org.geotools.data.simple.SimpleFeatureIterator;
+import org.geotools.data.store.ContentFeatureSource;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.factory.Hints;
 import org.geotools.feature.FeatureIterator;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.util.logging.Logging;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
@@ -71,12 +78,18 @@ public abstract class JDBCVirtualTableTest extends JDBCTestSupport {
         dialect.encodeColumnName(aname("flow"), sb);
         sb.append(" > 4");
         vt = new VirtualTable("riverReduced", sb.toString());
-        vt.addGeometryMetadatata("geom", LineString.class, 4326);
+        vt.addGeometryMetadatata(aname("geom"), LineString.class, 4326);
         dataStore.addVirtualTable(vt);
+        
+        // same vt, this time with a sql comment
+        sb.append("\n--This is a comment");
+        vt = new VirtualTable("riverReducedComment", sb.toString());
+        vt.addGeometryMetadatata(aname("geom"), LineString.class, 4326);
+        dataStore.addVirtualTable(vt);    
         
         // the same vt, but with a id specification
         vt = new VirtualTable("riverReducedPk", sb.toString());
-        vt.addGeometryMetadatata("geom", LineString.class, 4326);
+        vt.addGeometryMetadatata(aname("geom"), LineString.class, 4326);
         vt.setPrimaryKeyColumns(Arrays.asList(aname("id")));
         dataStore.addVirtualTable(vt);    
         
@@ -98,7 +111,7 @@ public abstract class JDBCVirtualTableTest extends JDBCTestSupport {
         dialect.encodeTableName(tname("river"), sb);
         sb.append(" %where%");
         vt = new VirtualTable("riverParam", sb.toString());
-        vt.addGeometryMetadatata("geom", LineString.class, 4326);
+        vt.addGeometryMetadatata(aname("geom"), LineString.class, 4326);
         vt.addParameter(new VirtualTableParameter("mul", "1", new RegexpValidator("[\\d\\.e\\+-]+")));
         vt.addParameter(new VirtualTableParameter("where", ""));
         dataStore.addVirtualTable(vt);
@@ -115,6 +128,17 @@ public abstract class JDBCVirtualTableTest extends JDBCTestSupport {
         SimpleFeatureType type = dataStore.getSchema("riverReduced");
         assertNotNull(type);
         
+        checkRiverReduced(type);
+    }
+    
+    public void testRiverReducedCommentSchema() throws Exception {
+        SimpleFeatureType type = dataStore.getSchema("riverReducedComment");
+        assertNotNull(type);
+        
+        checkRiverReduced(type);
+    }
+
+    private void checkRiverReduced(SimpleFeatureType type) {
         assertEquals(4, type.getAttributeCount());
         AttributeDescriptor id = type.getDescriptor(aname("id"));
         assertTrue(Number.class.isAssignableFrom(id.getType().getBinding()));
@@ -124,6 +148,10 @@ public abstract class JDBCVirtualTableTest extends JDBCTestSupport {
         assertEquals(String.class, river.getType().getBinding());
         AttributeDescriptor doubleFlow = type.getDescriptor(aname("doubleFlow"));
         assertTrue(Number.class.isAssignableFrom(doubleFlow.getType().getBinding()));
+        
+        // check srid and dimension are set as expected
+        assertEquals(4326, type.getGeometryDescriptor().getUserData().get(JDBCDataStore.JDBC_NATIVE_SRID));
+        assertEquals(2, type.getGeometryDescriptor().getUserData().get(Hints.COORDINATE_DIMENSION));
     }
     
     public void testListAll() throws Exception {
@@ -253,6 +281,78 @@ public abstract class JDBCVirtualTableTest extends JDBCTestSupport {
         } catch(Exception e) {
             // fine
         }
+    }
 
+    public void testInvalidView() throws Exception {
+        StringBuffer sb = new StringBuffer();
+        sb.append("select ");
+        dialect.encodeColumnName(null, aname("id"), sb);
+        sb.append(", ");
+        dialect.encodeColumnName(null, aname("flow"), sb);
+        sb.append(" from ");
+        if (dbSchemaName != null) {
+            dialect.encodeSchemaName(dbSchemaName, sb);
+            sb.append(".");
+        }
+        dialect.encodeTableName(tname("river"), sb);
+        VirtualTable vt = new VirtualTable("invalid_attribute", sb.toString());
+
+        Handler handler = new Handler() {
+            @Override
+            public synchronized void publish(LogRecord record) {
+                fail("We should not have received any log statement");
+            }
+
+            @Override
+            public void flush() {
+                // nothing to do
+            }
+
+            @Override
+            public void close() throws SecurityException {
+                // nothing to do
+            }
+        };
+        handler.setLevel(Level.WARNING);
+        Logger logger = Logging.getLogger("org.geotools.jdbc");
+        Level oldLevel = logger.getLevel();
+
+        SimpleFeatureIterator fi = null;
+        try {
+            logger.setLevel(java.util.logging.Level.SEVERE);
+            logger.addHandler(handler);
+            dataStore.createVirtualTable(vt);
+            ContentFeatureSource fs = dataStore.getFeatureSource("invalid_attribute");
+
+            // now hack the sql view definition to inject an invalid column name,
+            // it's easier than having to alter the column name in the db to make the existing
+            // view invalid
+            sb.setLength(0);
+            dialect.encodeColumnName(null, aname("not_valid"), sb);
+            String notValid = sb.toString();
+            sb.setLength(0);
+            dialect.encodeColumnName(null, aname("flow"), sb);
+            String flow = sb.toString();
+            dataStore.virtualTables.get("invalid_attribute").sql = vt.sql.replace(flow, notValid);
+
+            fi = fs.getFeatures().features();
+            fail("We should not have gotten here, we were supposed to get a sql exception");
+        } catch (RuntimeException e) {
+            // fine, this is expected
+            assertTrue(e.getCause() instanceof IOException);
+        } finally {
+            if (fi != null) {
+                fi.close();
+            }
+            dataStore.dropVirtualTable("invalid_attribute");
+
+            // shake the vm to make it run the finalizers
+            System.gc();
+            System.runFinalization();
+
+            // reset the handlers
+            logger.setLevel(oldLevel);
+            logger.removeHandler(handler);
+        }
     }
 }

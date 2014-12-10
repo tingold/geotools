@@ -20,6 +20,10 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import org.geotools.util.logging.Logging;
 
 /**
  * Executes a chain of {@link PrimaryKeyFinder} in the order they are defined
@@ -31,6 +35,8 @@ import java.util.List;
  * @source $URL$
  */
 public class CompositePrimaryKeyFinder extends PrimaryKeyFinder {
+    
+    private static final Logger LOGGER = Logging.getLogger(CompositePrimaryKeyFinder.class);
 
     List<PrimaryKeyFinder> finders;
 
@@ -42,9 +48,14 @@ public class CompositePrimaryKeyFinder extends PrimaryKeyFinder {
     public PrimaryKey getPrimaryKey(JDBCDataStore store, String schema, String table, Connection cx)
             throws SQLException {
         for (PrimaryKeyFinder finder : finders) {
-            PrimaryKey pk = finder.getPrimaryKey(store, schema, table, cx);
-            if (pk != null)
-                return pk;
+            try {
+                PrimaryKey pk = finder.getPrimaryKey(store, schema, table, cx);
+                if (pk != null)
+                    return pk;
+            } catch(SQLException e) {
+                LOGGER.log(Level.WARNING, "Failure occurred while looking up the primary "
+                        + "key with finder: " + finder, e);
+            }
         }
 
         return null;

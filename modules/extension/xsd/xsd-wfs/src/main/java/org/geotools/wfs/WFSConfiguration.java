@@ -2,7 +2,7 @@
  *    GeoTools - The Open Source Java GIS Toolkit
  *    http://geotools.org
  *
- *    (C) 2002-2008, Open Source Geospatial Foundation (OSGeo)
+ *    (C) 2002-2014, Open Source Geospatial Foundation (OSGeo)
  *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
@@ -61,6 +61,7 @@ import org.geotools.wfs.bindings.WFS_CapabilitiesTypeBinding;
 import org.geotools.wfs.bindings._XlinkPropertyNameBinding;
 import org.geotools.wfs.v2_0.bindings.QueryExpressionTextDelegate;
 import org.geotools.xml.Configuration;
+import org.geotools.xml.XSD;
 import org.picocontainer.MutablePicoContainer;
 
 
@@ -79,7 +80,7 @@ public abstract class WFSConfiguration extends Configuration {
      *
      * @generated
      */
-    protected WFSConfiguration(WFS wfs) {
+    protected WFSConfiguration(XSD wfs) {
         super(wfs);
     }
 
@@ -132,25 +133,16 @@ public abstract class WFSConfiguration extends Configuration {
             InsertedFeatureTypeBinding.class);
         container.registerComponentImplementation(WFS.InsertElementType,
             InsertElementTypeBinding.class);
-        container.registerComponentImplementation(WFS.InsertResultsType,
-            InsertResultsTypeBinding.class);
-        container.registerComponentImplementation(WFS.LockFeatureResponseType,
-            LockFeatureResponseTypeBinding.class);
         container.registerComponentImplementation(WFS.LockFeatureType, LockFeatureTypeBinding.class);
         container.registerComponentImplementation(WFS.LockType, LockTypeBinding.class);
         container.registerComponentImplementation(WFS.MetadataURLType, MetadataURLTypeBinding.class);
         container.registerComponentImplementation(WFS.NativeType, NativeTypeBinding.class);
-        container.registerComponentImplementation(WFS.OperationsType, OperationsTypeBinding.class);
         container.registerComponentImplementation(WFS.OperationType, OperationTypeBinding.class);
         container.registerComponentImplementation(WFS.OutputFormatListType,
             OutputFormatListTypeBinding.class);
         container.registerComponentImplementation(WFS.PropertyType, PropertyTypeBinding.class);
         container.registerComponentImplementation(WFS.QueryType, QueryTypeBinding.class);
         container.registerComponentImplementation(WFS.ResultTypeType, ResultTypeTypeBinding.class);
-        container.registerComponentImplementation(WFS.TransactionResponseType,
-            TransactionResponseTypeBinding.class);
-        container.registerComponentImplementation(WFS.TransactionResultsType,
-            TransactionResultsTypeBinding.class);
         container.registerComponentImplementation(WFS.TransactionSummaryType,
             TransactionSummaryTypeBinding.class);
         container.registerComponentImplementation(WFS.TransactionType, TransactionTypeBinding.class);

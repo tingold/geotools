@@ -61,6 +61,8 @@ public class MetadataTablePrimaryKeyFinder extends PrimaryKeyFinder {
      */
     //  gt_pk_metadata_table
     public static final String DEFAULT_TABLE = "GT_PK_METADATA";
+    
+    volatile Boolean metadataTableExists = null; 
 
     /**
      * Known policies pk column treatment policies
@@ -88,6 +90,7 @@ public class MetadataTablePrimaryKeyFinder extends PrimaryKeyFinder {
 
     public void setTableSchema(String tableSchema) {
         this.tableSchema = tableSchema;
+        this.metadataTableExists = null;
     }
 
     /**
@@ -99,6 +102,7 @@ public class MetadataTablePrimaryKeyFinder extends PrimaryKeyFinder {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+        this.metadataTableExists = null;
     }
 
     @Override
@@ -115,21 +119,30 @@ public class MetadataTablePrimaryKeyFinder extends PrimaryKeyFinder {
             // catch errors later but log them at a higher level in case the table
             // is there but does not have the required structure). We just don't want
             // to fill the logs of people not using the metadata table with errors 
-            try {
-                st = cx.createStatement();
-                StringBuffer sb = new StringBuffer();
-                sb.append("SELECT * FROM ");
-                if (metadataSchema != null) {
-                    sb.append(metadataSchema);
-                    sb.append(".");
+            if(metadataTableExists == null) {
+                synchronized (this) {
+                    if(metadataTableExists == null) {
+                        try {
+                            st = cx.createStatement();
+                            StringBuffer sb = new StringBuffer();
+                            sb.append("SELECT * FROM ");
+                            if (metadataSchema != null) {
+                                sb.append(metadataSchema);
+                                sb.append(".");
+                            }
+                            sb.append(tableName).append(" WHERE 1 = 0");
+                            rs = st.executeQuery(sb.toString());
+                            metadataTableExists = true;
+                        } catch(Exception e) {
+                            metadataTableExists = false;
+                        } finally {
+                            store.closeSafe(rs);
+                        }
+                    }
                 }
-                sb.append(tableName);
-                rs = st.executeQuery(sb.toString());
-            } catch(Exception e) {
-                // ok, the table is not there
+            }
+            if(!metadataTableExists) {
                 return null;
-            } finally {
-                store.closeSafe(rs);
             }
             
             // build query against the metadata table
@@ -168,7 +181,7 @@ public class MetadataTablePrimaryKeyFinder extends PrimaryKeyFinder {
                 
                 // check the column name is known
                 if(colNames == null) {
-                    colNames = getColumnNames(metaData, schema, table);
+                    colNames = getColumnNames(store, metaData, schema, table);
                 }
                 if(!colNames.contains(colName)) {
                     LOGGER.warning("Unknown column " + colName + " in table " + table);
@@ -214,11 +227,13 @@ public class MetadataTablePrimaryKeyFinder extends PrimaryKeyFinder {
         }
     }
 
-    Set<String> getColumnNames(DatabaseMetaData metaData, String schema, String table) throws SQLException {
+    Set<String> getColumnNames(JDBCDataStore store, DatabaseMetaData metaData, String schema,
+                               String table) throws SQLException {
         ResultSet rs = null;
         Set<String> result = new HashSet<String>();
         try {
-            rs = metaData.getColumns(null, schema, table, null);      
+            rs = metaData.getColumns(null, store.escapeNamePattern(metaData, schema),
+                    store.escapeNamePattern(metaData, table), null);
             while(rs.next()) {
                 result.add(rs.getString("COLUMN_NAME"));
             }

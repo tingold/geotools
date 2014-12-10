@@ -16,9 +16,18 @@
  */
 package org.geotools.gml3;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import org.custommonkey.xmlunit.SimpleNamespaceContext;
+import org.custommonkey.xmlunit.XMLUnit;
 import org.geotools.xml.Configuration;
 import org.geotools.xml.test.XMLTestSupport;
+import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /*
  * Test bindings by extending this class with test cases that follow this pattern:
@@ -67,6 +76,20 @@ import org.w3c.dom.Element;
  * @source $URL$
  */
 public abstract class GML3TestSupport extends XMLTestSupport {
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+
+        Map<String, String> namespaces = new HashMap<String, String>();
+        namespaces.put("xs", "http://www.w3.org/2001/XMLSchema");
+        namespaces.put("xsd", "http://www.w3.org/2001/XMLSchema");
+        namespaces.put("gml", "http://www.opengis.net/gml");
+        namespaces.put("xlink", "http://www.w3.org/1999/xlink");
+        namespaces.put("xsi", "http://www.w3.org/2001/XMLSchema-instance");
+        XMLUnit.setXpathNamespaceContext(new SimpleNamespaceContext(namespaces));
+    }
+
     protected void registerNamespaces(Element root) {
         super.registerNamespaces(root);
         root.setAttribute("xmlns:gml", "http://www.opengis.net/gml");
@@ -79,6 +102,52 @@ public abstract class GML3TestSupport extends XMLTestSupport {
     protected Configuration createConfiguration() {
         return new GMLConfiguration(enableExtendedArcSurfaceSupport());
     }
+
+    protected void checkPosOrdinates(Document doc,  int expectedNumOrdinates) 
+    {
+    	checkOrdinates(doc, GML.pos.getLocalPart(), expectedNumOrdinates);
+    }
+    
+    protected void checkPosListOrdinates(Document doc,  int expectedNumOrdinates) 
+    {
+    	checkOrdinates(doc, GML.posList.getLocalPart(), expectedNumOrdinates);
+    }
+    
+    
+	/**
+	 * Checks that a posList exists, has a string as content,
+	 * and the string encodes nOrdinates ordinates correctly
+	 * (i.e. blank-separated).
+	 * 
+	 * @param doc
+	 * @param expectedNumOrdinates
+	 */
+	private void checkOrdinates(Document doc, String ordTag, int expectedNumOrdinates) {
+	    NodeList nl = doc.getElementsByTagNameNS(GML.NAMESPACE, ordTag);
+	    Node posListNode = nl.item(0);
+	    assertEquals(1, posListNode.getChildNodes().getLength());
+	    String content = posListNode.getChildNodes().item(0).getNodeValue();
+		String[] ord = content.split("\\s+");
+		assertEquals(expectedNumOrdinates, ord.length);
+	}
+
+	/**
+	 * Checks that a given geometry element has an srsDimension attribute with an expected value
+	 * 
+	 * @param doc
+	 * @param tag
+	 * @param expectedDim  
+	 */
+	protected void checkDimension(Document doc, String tag, int expectedDim) {
+	    NodeList lsNL = doc.getElementsByTagNameNS(GML.NAMESPACE, tag);
+	    Node geomNode = lsNL.item(0);
+	    NamedNodeMap attrMap = geomNode.getAttributes();
+	    Node dimNode = attrMap.getNamedItem("srsDimension");
+	    assertNotNull(dimNode);
+	    String dimStr = dimNode.getChildNodes().item(0).getNodeValue();
+		int dim = Integer.parseInt(dimStr);
+		assertEquals(dim, expectedDim);
+	}
     
     /*
      * To be overriden by subclasses that require the extended arc/surface bindings
@@ -87,4 +156,16 @@ public abstract class GML3TestSupport extends XMLTestSupport {
     protected boolean enableExtendedArcSurfaceSupport() {
         return false;
     }
+    
+    /**
+     * Return the gml:id of a Node (must be an Element).
+     * 
+     * @param node
+     * @return the gml:id
+     */
+    protected String getID(Node node) {
+        return node.getAttributes().getNamedItemNS(GML.NAMESPACE, GML.id.getLocalPart())
+                .getNodeValue();
+    }
+    
 }

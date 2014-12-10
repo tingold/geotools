@@ -10,7 +10,7 @@ Creating a JDBCDataStore
 
 The process of creating a JDBC data store follows the regular steps of creating any type of datastore. That is defining the parameters to connect to the database in a map, and then creating the data store factory.:
   
-.. literalinclude:: /../src/main/java/org/geotools/data/SimpleFeatureStoreExamples.java
+.. literalinclude:: /../src/main/java/org/geotools/jdbc/JDBCExamples.java
    :language: java
    :start-after: // postgisExample start
    :end-before: // postgisExample end
@@ -38,7 +38,11 @@ Here is an example::
   map.put( "max connections", 25);
   map.put( "min connections", 10);
   map.put( "connection timeout", 5);
-  map.put( "validating connections", true);
+  
+Connection validation is on by default, it takes a small toll to make sure the connection is still valid before using it (e.g., make sure the DBMS did not drop it due to a server side timeout).
+If you want to get extra performance and you're sure the connections will never be dropped you can disable connection validation with::
+  
+  map.put( "validating connections", false);
 
 Connection Parameters
 ^^^^^^^^^^^^^^^^^^^^^
@@ -98,6 +102,19 @@ Crucial to this is the agreement that they use a unique "dbtype" for each format
 | "Max open prepared statements" | Maximum number of prepared statements kept open    |
 |                                | and cached for each connection in the pool.        |
 |                                | Set to 0 to have unbounded caching, -1 to disable  |
++--------------------------------+----------------------------------------------------+
+| "Test while idle"              | Periodically test if the connections are still     |
+|                                | valid also while idle in the pool                  | 
++--------------------------------+----------------------------------------------------+
+| "Time between evictor runs"    | Number of seconds between idle object evictor runs.|
+|                                | The default value is 300 seconds.                  | 
++--------------------------------+----------------------------------------------------+
+| "Min evictable time"           | Number of seconds a connection needs to stay idle  |
+|                                | before the evictor starts to consider closing it   |
++--------------------------------+----------------------------------------------------+
+| "Evictor tests per run"        | Number of connections checked by the idle          |
+|                                | connection evictor for each of its runs.           |
+|                                | The default value is 3 connections.                |
 +--------------------------------+----------------------------------------------------+
 
 **Tweaking and Performance**

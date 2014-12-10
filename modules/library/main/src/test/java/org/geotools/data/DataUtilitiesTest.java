@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.vividsolutions.jts.geom.Point;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.factory.CommonFactoryFinder;
@@ -43,6 +44,8 @@ import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.feature.type.AttributeDescriptorImpl;
 import org.geotools.feature.type.AttributeTypeImpl;
 import org.geotools.filter.IllegalFilterException;
+import org.geotools.geometry.jts.GeometryBuilder;
+import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.test.TestData;
@@ -65,6 +68,7 @@ import org.opengis.filter.expression.Function;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
+import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import org.geotools.data.memory.MemoryDataStore;
 
@@ -107,7 +111,12 @@ public class DataUtilitiesTest extends DataTestCase {
         assertSame( simple, source);  
     } 
 
-
+    public void testFirst() {
+        SimpleFeatureCollection collection = DataUtilities.collection( roadFeatures );
+         SimpleFeature first = DataUtilities.first( collection );
+        assertNotNull( first);
+        assertEquals( "road.rd1", first.getID() );
+    }
     public void testCheckDirectory() {
         File home = new File(System.getProperty("user.home"));
         File file = DataUtilities.checkDirectory(home);
@@ -184,8 +193,13 @@ public class DataUtilitiesTest extends DataTestCase {
             handleFile("C:\\one\\two");
             handleFile("C:\\one\\two\\and three");
             handleFile("D:\\");
-            if (TestData.isExtensiveTest())
+            if (TestData.isExtensiveTest()){
                 handleFile("\\\\host\\share\\file");
+                // from GEOT-3300 DataUtilities.urlToFile doesn't handle network paths correctly
+                URL url = new URL("file", "////oehhwsfs09", "/some/path/on/the/server/filename.nds");
+                File windowsShareFile = DataUtilities.urlToFile( url );
+                assertNotNull(windowsShareFile);
+            }
         } else {
             handleFile("/one");
             handleFile("one");
@@ -202,6 +216,11 @@ public class DataUtilitiesTest extends DataTestCase {
         File file = File.createTempFile("hello", "world");
         handleFile(file.getAbsolutePath());
         handleFile(file.getPath());
+        
+        // from GEOT-3300 DataUtilities.urlToFile doesn't handle network paths correctly
+        URL url = new URL("file", "////oehhwsfs09", "/some/path/on/the/server/filename.nds");
+        File windowsShareFile = DataUtilities.urlToFile( url );
+        assertNotNull(windowsShareFile);
     }
 
     private String replaceSlashes(String string) {
@@ -246,10 +265,11 @@ public class DataUtilitiesTest extends DataTestCase {
         String[] names;
 
         names = DataUtilities.attributeNames(roadType);
-        assertEquals(3, names.length);
+        assertEquals(4, names.length);
         assertEquals("id", names[0]);
         assertEquals("geom", names[1]);
         assertEquals("name", names[2]);
+        assertEquals("uuid", names[3]);
 
         names = DataUtilities.attributeNames(subRoadType);
         assertEquals(2, names.length);
@@ -382,7 +402,7 @@ public class DataUtilitiesTest extends DataTestCase {
 
         // different namespace
         SimpleFeatureType road3 = DataUtilities.createType("test.road",
-                "id:0,geom:LineString,name:String");
+                "id:0,geom:LineString,name:String,uuid:UUID");
         assertEquals(0, DataUtilities.compare(road3, roadType));
     }
 
@@ -434,7 +454,50 @@ public class DataUtilitiesTest extends DataTestCase {
         assertEquals(rv1.getAttribute("flow"), rv3.getAttribute("flow"));
         assertNull(rv3.getDefaultGeometry());
     }
+    /**
+     * Test createType and createFeature methods as per GEOT-4150
+     */
+    public void testCreate() throws Exception {
+        SimpleFeatureType featureType = DataUtilities.createType("Contact","id:Integer,party:String,geom:Geometry:srid=4326");
+        SimpleFeature feature1 =  DataUtilities.createFeature( featureType, "fid1=1|Jody Garnett\\nSteering Committee|POINT(1 2)" );
+        SimpleFeature feature2 =  DataUtilities.createFeature( featureType, "2|John Hudson\\|Hapless Victim|POINT(6 2)" );
 
+        assertNotNull( featureType.getCoordinateReferenceSystem() );
+        
+        Geometry geometry = (Geometry)feature1.getAttribute("geom");
+        assertEquals( "geom", 2.0, geometry.getCoordinate().y );
+        assertEquals( "fid preservation", "fid1", feature1.getID() );
+        
+        // test escape handling
+        assertEquals( "newline decode check", "Jody Garnett\nSteering Committee", feature1.getAttribute("party") );
+        assertEquals( "escape check", "John Hudson|Hapless Victim", feature2.getAttribute("party") );
+        
+        // test feature id handling
+        assertEquals( "fid1", feature1.getID() );
+        assertNotNull( feature2.getID() );
+        assertEquals( feature2.getID(), feature2.getIdentifier().getID() );
+
+        // test geometry handling
+        GeometryBuilder geomBuilder = new GeometryBuilder();
+        assertEquals( geomBuilder.point(6,2), feature2.getDefaultGeometry() );
+        assertEquals( geomBuilder.point(6,2), feature2.getAttribute("geom") );
+
+    }
+    /**
+     * Test createType and createFeature methods as per GEOT-4150
+     */
+
+    public void testEncode() throws Exception {
+        SimpleFeatureType featureType = DataUtilities.createType("Contact","id:Integer,party:String,geom:Geometry:srid=4326");
+        SimpleFeature feature1 =  DataUtilities.createFeature( featureType, "fid1=1|Jody Garnett\\nSteering Committee|POINT (1 2)" );
+        SimpleFeature feature2 =  DataUtilities.createFeature( featureType, "2|John Hudson\\|Hapless Victim|POINT (6 2)" );
+        
+        String spec = DataUtilities.encodeType(featureType);
+        assertEquals("id:Integer,party:String,geom:Geometry:srid=4326", spec );
+
+        String text = DataUtilities.encodeFeature(feature1);
+        assertEquals( "fid1=1|Jody Garnett\\nSteering Committee|POINT (1 2)", text );
+    }
     /*
      * Test for Feature template(FeatureType)
      */
@@ -475,6 +538,15 @@ public class DataUtilitiesTest extends DataTestCase {
         assertEquals(roadFeatures.length, collection.size());
     }
 
+    public void testBounds() {
+        SimpleFeatureCollection collection = DataUtilities
+                .collection(roadFeatures);
+        
+        ReferencedEnvelope expected = collection.getBounds();
+        ReferencedEnvelope actual = DataUtilities.bounds( collection );
+        assertEquals( expected, actual );
+    }
+    
     public void testCollectionList() {
         SimpleFeatureCollection collection = DataUtilities
                 .collection(Arrays.asList(roadFeatures));
@@ -522,6 +594,32 @@ public class DataUtilitiesTest extends DataTestCase {
         before = DataUtilities.createType("cities","the_geom:Point:srid=4326,name:String,population:Integer");
         after = DataUtilities.createSubType(before, new String[] {"the_geom"});
         assertEquals(before.getGeometryDescriptor(), after.getGeometryDescriptor());
+    }
+
+    public void testCreateSubTypePreservesDefaultGeometryProperty() throws Exception {
+        SimpleFeatureTypeBuilder tb = new SimpleFeatureTypeBuilder();
+        tb.setName("test");
+        tb.add("name", String.class);
+        tb.add("the_geom1", Point.class, 4326);
+        tb.add("the_geom2", Point.class, 4326);
+        tb.add("the_geom3", Point.class, 4326);
+        tb.setDefaultGeometry("the_geom2");
+        SimpleFeatureType before = tb.buildFeatureType();
+        SimpleFeatureType after = DataUtilities.createSubType(before, new String[]{"name", "the_geom1", "the_geom3"});
+        assertEquals(3, after.getAttributeCount());
+        assertEquals("the_geom1", after.getGeometryDescriptor().getLocalName());
+
+        after = DataUtilities.createSubType(before, new String[]{"name", "the_geom1", "the_geom3"}, DefaultGeographicCRS.WGS84);
+        assertEquals(3, after.getAttributeCount());
+        assertEquals("the_geom1", after.getGeometryDescriptor().getLocalName());
+
+        after = DataUtilities.createSubType(before, new String[]{"name", "the_geom1", "the_geom2"});
+        assertEquals(3, after.getAttributeCount());
+        assertEquals("the_geom2", after.getGeometryDescriptor().getLocalName());
+
+        after = DataUtilities.createSubType(before, new String[]{"name", "the_geom1", "the_geom2"}, DefaultGeographicCRS.WGS84);
+        assertEquals(3, after.getAttributeCount());
+        assertEquals("the_geom2", after.getGeometryDescriptor().getLocalName());
     }
 
     public void testSource() throws Exception {
@@ -622,7 +720,7 @@ public class DataUtilitiesTest extends DataTestCase {
     public void testSpecNoCRS() throws Exception {
         String spec = "id:String,polygonProperty:Polygon";
         SimpleFeatureType ft = DataUtilities.createType("testType", spec);
-        String spec2 = DataUtilities.spec(ft);
+        String spec2 = DataUtilities.encodeType(ft);
         // System.out.println("BEFORE:"+spec);
         // System.out.println(" AFTER:"+spec2);
         assertEquals(spec, spec2);
@@ -631,7 +729,7 @@ public class DataUtilitiesTest extends DataTestCase {
     public void testSpecCRS() throws Exception {
         String spec = "id:String,polygonProperty:Polygon:srid=32615";
         SimpleFeatureType ft = DataUtilities.createType("testType", spec);
-        String spec2 = DataUtilities.spec(ft);
+        String spec2 = DataUtilities.encodeType(ft);
         // System.out.println("BEFORE:"+spec);
         // System.out.println(" AFTER:"+spec2);
         assertEquals(spec, spec2);
@@ -646,7 +744,7 @@ public class DataUtilitiesTest extends DataTestCase {
 
         // since we cannot go back to a code with do a best effort encoding
         String expected = "id:String,polygonProperty:Polygon";
-        String spec2 = DataUtilities.spec(transformedFt);
+        String spec2 = DataUtilities.encodeType(transformedFt);
         // System.out.println("  BEFORE:"+spec);
         // System.out.println("EXPECTED:"+expected);
         // System.out.println("  AFTER:"+spec2);

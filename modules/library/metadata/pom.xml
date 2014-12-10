@@ -16,7 +16,7 @@
   <parent>
     <groupId>org.geotools</groupId>
     <artifactId>library</artifactId>
-    <version>8-SNAPSHOT</version>
+    <version>13-SNAPSHOT</version>
   </parent>
 
 
@@ -111,6 +111,11 @@
       (in which case he should put this dependency explicitly on the classpath).
     -->
     <dependency>
+      <groupId>javax.media</groupId>
+      <artifactId>jai_core</artifactId>
+      <!-- The version number is specified in the parent POM. -->
+    </dependency>
+    <dependency>
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
       <!-- The version number is specified in the parent POM. -->
@@ -136,40 +141,5 @@
       </resource>
     </resources>
   </build>
-
-  <profiles>
-    <profile>
-       <id>gitinfo</id>
-       <activation>
-         <file>
-           <!-- .git directory specified relative to working directory, so
-                this profile only engaged when building from root. This is
-                changed/fixed in maven 3, so when build server switches to 
-                maven 3 change this to '../../../.git' -->
-           <exists>.git</exists>
-         </file>
-       </activation> 
-       <build>
-        <plugins>
-          <plugin>
-            <groupId>pl.project13.maven</groupId>
-            <artifactId>git-commit-id-plugin</artifactId>
-             <executions>
-               <execution>
-                 <phase>generate-resources</phase>
-                 <goals>
-                   <goal>revision</goal>
-                 </goals>
-               </execution>
-            </executions>
-            <configuration>
-              <generateGitPropertiesFile>true</generateGitPropertiesFile>
-              <generateGitPropertiesFilename>target/classes/git.properties</generateGitPropertiesFilename>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 
 </project>

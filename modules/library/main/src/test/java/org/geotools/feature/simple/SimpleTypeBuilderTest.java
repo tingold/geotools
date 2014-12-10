@@ -31,6 +31,7 @@ import org.opengis.feature.type.Schema;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.Polygon;
 
 /**
  * 
@@ -97,4 +98,31 @@ public class SimpleTypeBuilderTest extends TestCase {
 		assertNull( type.getGeometryDescriptor().getType().getCoordinateReferenceSystem() );
 		assertEquals( DefaultGeographicCRS.WGS84, ((GeometryType)type.getType("point2")).getCoordinateReferenceSystem());
 	}
+	
+	
+	public void testAttributeDefaultValue() {
+	    SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
+	    builder.setName("buggy");
+	    builder.nillable(false).defaultValue(12).add("attrWithDefault", Integer.class);
+	    builder.nillable(true).defaultValue(null).add("attrWithoutDefault", Integer.class);
+	    SimpleFeatureType featureType = builder.buildFeatureType();
+	    assertFalse(featureType.getDescriptor("attrWithDefault").isNillable());
+	    assertEquals(12, featureType.getDescriptor("attrWithDefault").getDefaultValue());
+	    assertTrue(featureType.getDescriptor("attrWithoutDefault").isNillable());
+	    assertNull(featureType.getDescriptor("attrWithoutDefault").getDefaultValue());
+	}
+
+    public void testMaintainDefaultGeometry() {
+        builder.setName("testGeometries");
+        builder.add("geo1", Point.class, DefaultGeographicCRS.WGS84);
+        builder.add("geo2", Polygon.class, DefaultGeographicCRS.WGS84);
+        builder.setDefaultGeometry("geo1");
+        SimpleFeatureType type = builder.buildFeatureType();
+
+        // performing an attribute selection, even changing order, should not change
+        // the default geometry, that had a special meaning in the original source
+        SimpleFeatureType retyped = SimpleFeatureTypeBuilder.retype(type, new String[] { "geo2",
+                "geo1" });
+        assertEquals("geo1", retyped.getGeometryDescriptor().getLocalName());
+    }
 }

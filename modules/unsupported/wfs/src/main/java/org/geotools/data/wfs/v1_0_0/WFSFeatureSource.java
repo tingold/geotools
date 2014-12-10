@@ -22,9 +22,12 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import net.opengis.ows10.KeywordsType;
 
 import org.geotools.data.AbstractFeatureSource;
 import org.geotools.data.DataStore;
@@ -123,9 +126,28 @@ public class WFSFeatureSource extends AbstractFeatureSource implements SimpleFea
                 return featureSetDescription.getAbstract();
             }
 
-            @SuppressWarnings("unchecked")
             public Set<String> getKeywords() {
-                return new HashSet<String>(featureSetDescription.getKeywords());
+                return extractKeywords(featureSetDescription.getKeywords());
+            }
+            
+            @SuppressWarnings("unchecked")
+            private Set<String> extractKeywords(List<?> keywordsList) {
+                Set<String> keywords = new HashSet<String>();
+                if (keywordsList != null) {
+                    for (Object keys : keywordsList) {
+                        if (keys instanceof KeywordsType) {
+                            List<String> kws = ((KeywordsType)keys).getKeyword();
+                            for (String kw : kws) {
+                                if (kw != null && kw.trim().length() > 0) {
+                                    keywords.add(kw);
+                                }
+                            }
+                        } else if (keys instanceof String) {
+                            keywords.add((String)keys);
+                        }
+                    }
+                }
+                return keywords;
             }
 
             public String getName() {
@@ -207,7 +229,7 @@ public class WFSFeatureSource extends AbstractFeatureSource implements SimpleFea
     }
 
     /**
-     * @see org.geotools.data.FeatureSource#getFeatures(org.geotools.filter.Filter)
+     * @see org.geotools.data.FeatureSource#getFeatures(Filter)
      */
     public SimpleFeatureCollection getFeatures( Filter filter )
             throws IOException {

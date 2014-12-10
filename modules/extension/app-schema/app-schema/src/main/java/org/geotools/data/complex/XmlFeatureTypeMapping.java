@@ -29,8 +29,8 @@ import java.util.Map;
 
 import org.geotools.data.FeatureSource;
 import org.geotools.data.complex.PathAttributeList.Pair;
-import org.geotools.data.complex.filter.XPath.Step;
-import org.geotools.data.complex.filter.XPath.StepList;
+import org.geotools.data.complex.filter.XPathUtil.Step;
+import org.geotools.data.complex.filter.XPathUtil.StepList;
 import org.geotools.data.complex.xml.XmlFeatureSource;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.filter.LiteralExpressionImpl;
@@ -545,7 +545,7 @@ public class XmlFeatureTypeMapping extends FeatureTypeMapping {
      * @return
      */
     @Override
-    public List<Expression> findMappingsFor(final StepList propertyName) {
+    public List<Expression> findMappingsFor(final StepList propertyName, boolean includeNestedMappings) {
         List<Expression> expressions = null;
         
         // get all matching mappings if index is not specified, otherwise

@@ -21,8 +21,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.geotools.data.Join;
-import org.geotools.data.Query;
 import org.geotools.data.Join.Type;
+import org.geotools.data.Query;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.opengis.feature.simple.SimpleFeature;
@@ -63,7 +63,7 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
             
             while(it.hasNext()) {
                 SimpleFeature f = it.next();
-                assertEquals(5, f.getAttributeCount());
+                assertEquals(5 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
                 
                 SimpleFeature g = (SimpleFeature) f.getAttribute(tname("ftjoin"));
                 
@@ -79,6 +79,103 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
             }
         }
         finally {
+            it.close();
+            ita.close();
+            itb.close();
+        }
+    }
+
+    public void testSimpleJoinOnPrimaryKey() throws Exception {
+        dataStore.setExposePrimaryKeyColumns(true);
+
+        SimpleFeatureIterator ita = dataStore.getFeatureSource(tname("ft1")).getFeatures()
+                .features();
+        SimpleFeatureIterator itb = dataStore.getFeatureSource(tname("ftjoin")).getFeatures()
+                .features();
+
+        FilterFactory ff = dataStore.getFilterFactory();
+        Query q = new Query(tname("ft1"));
+        Join join = new Join(tname("ftjoin"), ff.equal(ff.property(aname("id")),
+                ff.property(aname("ftjoin.id")), true));
+        join.setAlias(tname("ftjoin"));
+        q.getJoins().add(join);
+
+        SimpleFeatureCollection features = dataStore.getFeatureSource(tname("ft1")).getFeatures(q);
+        assertEquals(dataStore.getFeatureSource(tname("ft1")).getFeatures(q).size(),
+                features.size());
+
+        SimpleFeatureIterator it = features.features();
+        try {
+            assertTrue(it.hasNext() && ita.hasNext() && itb.hasNext());
+
+            while (it.hasNext()) {
+                SimpleFeature f = it.next();
+                assertEquals(6, f.getAttributeCount());
+
+                SimpleFeature g = (SimpleFeature) f.getAttribute(tname("ftjoin"));
+
+                SimpleFeature a = ita.next();
+                SimpleFeature b = itb.next();
+
+                for (int i = 0; i < a.getAttributeCount(); i++) {
+                    assertAttributeValuesEqual(a.getAttribute(i), f.getAttribute(i));
+                }
+                for (int i = 0; i < b.getAttributeCount(); i++) {
+                    assertAttributeValuesEqual(b.getAttribute(i), g.getAttribute(i));
+                }
+            }
+        } finally {
+            it.close();
+            ita.close();
+            itb.close();
+        }
+    }
+
+    public void testSimpleJoinInvertedAliases() throws Exception {
+        doTestSimpleJoinInvertedAliases(false);
+        doTestSimpleJoinInvertedAliases(true);
+    }
+
+    void doTestSimpleJoinInvertedAliases(boolean exposePrimaryKeys) throws Exception {
+        dataStore.setExposePrimaryKeyColumns(exposePrimaryKeys);
+        SimpleFeatureIterator ita = dataStore.getFeatureSource(tname("ft1")).getFeatures()
+                .features();
+        SimpleFeatureIterator itb = dataStore.getFeatureSource(tname("ftjoin")).getFeatures()
+                .features();
+
+        FilterFactory ff = dataStore.getFilterFactory();
+        Query q = new Query(tname("ft1"));
+        q.setAlias("b");
+        Join join = new Join(tname("ftjoin"), ff.equal(ff.property(aname("stringProperty")),
+                ff.property(aname("name")), true));
+        join.setAlias("a");
+        q.getJoins().add(join);
+
+        SimpleFeatureCollection features = dataStore.getFeatureSource(tname("ft1")).getFeatures(q);
+        assertEquals(dataStore.getFeatureSource(tname("ft1")).getFeatures(q).size(),
+                features.size());
+
+        SimpleFeatureIterator it = features.features();
+        try {
+            assertTrue(it.hasNext() && ita.hasNext() && itb.hasNext());
+
+            while (it.hasNext()) {
+                SimpleFeature f = it.next();
+                assertEquals(5 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
+
+                SimpleFeature g = (SimpleFeature) f.getAttribute("a");
+
+                SimpleFeature a = ita.next();
+                SimpleFeature b = itb.next();
+
+                for (int i = 0; i < a.getAttributeCount(); i++) {
+                    assertAttributeValuesEqual(a.getAttribute(i), f.getAttribute(i));
+                }
+                for (int i = 0; i < b.getAttributeCount(); i++) {
+                    assertAttributeValuesEqual(b.getAttribute(i), g.getAttribute(i));
+                }
+            }
+        } finally {
             it.close();
             ita.close();
             itb.close();
@@ -104,13 +201,15 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
         SimpleFeatureIterator it = features.features();
         try {
             SimpleFeature f = it.next();
-            assertEquals(5, f.getAttributeCount());
+            assertEquals(5 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
             assertEquals(2, ((Number)f.getAttribute(aname("intProperty"))).intValue());
             assertEquals("two", f.getAttribute(aname("stringProperty")));
             
             SimpleFeature g = (SimpleFeature) f.getAttribute(aname("ftjoin"));
-            assertEquals(3, g.getAttributeCount());
-            assertEquals(2, ((Number)g.getAttribute(aname("id"))).intValue());
+            assertEquals(3 + (exposePrimaryKeys ? 1 : 0), g.getAttributeCount());
+            if (exposePrimaryKeys) {
+                assertEquals(2, ((Number) g.getAttribute(aname("id"))).intValue());
+            }
             assertEquals("two", g.getAttribute(aname("name")));
         }
         finally {
@@ -139,7 +238,7 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
         SimpleFeatureIterator it = features.features();
         try {
             SimpleFeature f = it.next();
-            assertEquals(5, f.getAttributeCount());
+            assertEquals(5 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
             assertEquals(2, ((Number)f.getAttribute(aname("intProperty"))).intValue());
             assertEquals("two", f.getAttribute(aname("stringProperty")));
             
@@ -162,7 +261,7 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
         Query q = new Query(tname("ft1"));
         Join j = new Join(tname("ftjoin"), 
             ff.equal(ff.property(aname("stringProperty")), ff.property(aname("name")), true));
-        j.filter(ff.greater(ff.property(aname("id")), ff.literal(1)));
+        j.filter(ff.greater(ff.property(aname("join1intProperty")), ff.literal(1)));
         q.getJoins().add(j);
         q.setFilter(ff.less(ff.property(aname("intProperty")), ff.literal(3)));
         
@@ -318,12 +417,12 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
             assertTrue(it.hasNext());
             
             SimpleFeature f = it.next();
-            assertEquals(5, f.getAttributeCount());
+            assertEquals(5 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
             assertEquals(2, ((Number)f.getAttribute(aname("intProperty"))).intValue());
             assertEquals("two", f.getAttribute(aname("stringProperty")));
             
             SimpleFeature g = (SimpleFeature) f.getAttribute(aname("foo"));
-            assertEquals(4, g.getAttributeCount());
+            assertEquals(4 + (exposePrimaryKeys ? 1 : 0), g.getAttributeCount());
             assertEquals(2, ((Number)g.getAttribute(aname("intProperty"))).intValue());
             assertEquals("two", g.getAttribute(aname("stringProperty")));
         }
@@ -333,7 +432,7 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
     }
 
     public void testSpatialJoin() throws Exception {
-        doTestSpatialJoin(false);
+        // doTestSpatialJoin(false);
         doTestSpatialJoin(true);
     }
     
@@ -417,7 +516,7 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
             
             while(it.hasNext()) {
                 SimpleFeature f = it.next();
-                assertEquals(4, f.getAttributeCount());
+                assertEquals(4 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
                 
                 SimpleFeature g = (SimpleFeature) f.getAttribute(tname("ft1"));
                 if ("three".equals(f.getAttribute(aname("name")))) {
@@ -426,6 +525,48 @@ public abstract class JDBCJoinTest extends JDBCTestSupport {
                 else {
                     assertNotNull(g);
                 }
+            }
+        }
+        finally {
+            it.close();
+        }
+    }
+
+    public void testJoinMoreThanTwo() throws Exception {
+        doJoinMoreThanTwo(false);
+        doJoinMoreThanTwo(true);
+    }
+    
+    void doJoinMoreThanTwo(boolean exposePrimaryKeys) throws Exception {
+        dataStore.setExposePrimaryKeyColumns(exposePrimaryKeys);
+        FilterFactory ff = dataStore.getFilterFactory();
+        Query q = new Query(tname("ftjoin"));
+        q.getJoins().add(new Join(tname("ft1"), 
+            ff.equal(ff.property(aname("name")), ff.property(aname("stringProperty")), true)));
+
+        q.getJoins().add(new Join(tname("ftjoin2"), 
+                ff.equal(ff.property(aname("join2intProperty")), ff.property(aname("join1intProperty")), true)));
+
+        SimpleFeatureCollection features = dataStore.getFeatureSource(tname("ftjoin")).getFeatures(q);
+        assertEquals(3, features.size());
+
+        SimpleFeatureIterator it = features.features();
+        try {
+            String[] ft1StringProp = new String[]{"zero","one","two"};
+            String[] ftjoin2StringProp = new String[]{"2nd zero","2nd one","2nd two"};
+            
+            while(it.hasNext()) {
+                SimpleFeature f = it.next();
+                assertEquals(5 + (exposePrimaryKeys ? 1 : 0), f.getAttributeCount());
+                Number nmb = (Number) f.getAttribute(aname("join1intProperty"));
+                Integer idx = nmb.intValue(); 
+                assertTrue(idx < 3);
+                SimpleFeature g = (SimpleFeature) f.getAttribute(tname("ft1"));
+                assertNotNull(g);
+                assertEquals(ft1StringProp[idx], g.getAttribute(aname("stringProperty")));
+                g = (SimpleFeature) f.getAttribute(tname("ftjoin2"));
+                assertNotNull(g);
+                assertEquals(ftjoin2StringProp[idx], g.getAttribute(aname("stringProperty2")));
             }
         }
         finally {

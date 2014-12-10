@@ -13,6 +13,10 @@ Here is a quick example of accessing a shapefile::
 References:
 
 * :doc:`gt-data <../data/datastore>` DataStore Code Examples
+* javadoc: `DataStore <http://docs.geotools.org/latest/javadocs/org/geotools/data/DataStore.html>`_
+* javadoc: `FeatureSource <http://docs.geotools.org/latest/javadocs/org/geotools/data/FeatureSource.html>`_
+* javadoc: `SimpleFeatureSource <http://docs.geotools.org/latest/javadocs/org/geotools/data/simple/SimpleFeatureSource.html>`_
+
 
 DataAccess
 ^^^^^^^^^^
@@ -20,7 +24,7 @@ DataAccess
 **DataAccess** represents a storage location or service for spatial data.
 
 
-.. image:: /images/datastore.PNG
+.. image:: /images/datastoreapi.png
 
 The DataAccess<T,F> defined as:
 
@@ -76,6 +80,15 @@ Here is a quick review of the DataAccess methods:
   Used to modify the contents of a shapefile, or alter an existing table.
   Not supported by all dataStores.
 
+* DataAccess.removeSchema(Name)
+  
+  Used to remove an existing table. Not supported by all dataStores.
+  
+  .. literalinclude:: /../src/main/java/org/geotools/api/DataStoreExamples.java
+     :language: java
+     :start-after: // exampleRemoveSchema start
+     :end-before: // exampleRemoveSchema end
+
 * DataAccess.getNames()
 * DataAccess.getSchema(Name)
 * DataAccess.getFeatureSource(Name): FeatureSource<FeatureType,Feature>
@@ -95,6 +108,7 @@ DataStore
 The **DataStore** interface is a DataAccess subclass that provides to explicitly work with content providers that only know how to deal with SimpleFeature and SimpleFeatureType.
 
 * DataStore.updateSchema(String, SimpleFeatureType)
+* DataStore.removeSchema(String)
 * DataStore.getTypeNames()
   
   Access an String[] of Name.getLocalName()
@@ -127,7 +141,6 @@ FeatureSource
 ^^^^^^^^^^^^^
 
 A FeatureSource is used to provide access to the contents of a DataStore.
-
 
 .. image:: /images/FeatureSource.PNG
 
@@ -169,12 +182,11 @@ In a similar fashion you can check if locking is supported between threads::
       // locking supported
   }
 
-  
 SimpleFeatureSource
 '''''''''''''''''''
 
-SimpleFeatueSource is the extension of FeatureSource returned by DataStore to explicitly work with SimpleFeature and SimpleFeatureCollection.
-
+SimpleFeatueSource is the extension of FeatureSource returned by DataStore to explicitly work with
+SimpleFeature and SimpleFeatureCollection.
 
 .. image:: /images/SimpleFeatureSource.PNG
 
@@ -210,7 +222,14 @@ Summary information:
 
 * FeatureSource.getBounds()
 * FeatureSource.getBounds(Query)
+  
+  May return null if the bounds are unknown or too costly to calculate.
+
 * FeatureSource.getCount(Query)
+  
+  May return -1 if the information is not readily avaialble. Formats such as shapefile 
+  keep this information avaialble in the header for handy reference. WFS does not provide
+  any way to ask for this information and thus always returns -1.
 
 Where a request is captured by a **Query**:
 
@@ -303,6 +322,28 @@ Where a request is captured by a **Query**:
     Example::
       
       query.setHints( new Hints( Query.INCLUDE_MANDITORY_PROPS, Boolean.TRUE ) );
+
+Examples:
+
+* How to count the number of features.
+  
+  Because the getCount method just checks the file or database header information it is designed
+  to be very fast. Not all implementations have access to this information making it a bit tricky
+  to count the number of avaialble features.
+  
+  The following code shows how to quickly count all the feautres available:
+  
+  .. literalinclude:: /../src/main/java/org/geotools/api/DataStoreExamples.java
+     :language: java
+     :start-after: // all start
+     :end-before: // all end
+  
+  You can modify this to use your own Query:
+  
+  .. literalinclude:: /../src/main/java/org/geotools/api/DataStoreExamples.java
+     :language: java
+     :start-after: // count start
+     :end-before: // count end
 
 SimpleFeatureStore
 ''''''''''''''''''

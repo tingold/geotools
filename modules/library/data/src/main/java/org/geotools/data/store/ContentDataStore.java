@@ -2,7 +2,7 @@
  *    GeoTools - The Open Source Java GIS Toolkit
  *    http://geotools.org
  * 
- *    (C) 2006-2008, Open Source Geospatial Foundation (OSGeo)
+ *    (C) 2006-2014, Open Source Geospatial Foundation (OSGeo)
  *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,6 @@ package org.geotools.data.store;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,7 +28,6 @@ import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFactorySpi;
 import org.geotools.data.DefaultServiceInfo;
 import org.geotools.data.FeatureReader;
-import org.geotools.data.FeatureSource;
 import org.geotools.data.FeatureWriter;
 import org.geotools.data.InProcessLockingManager;
 import org.geotools.data.LockingManager;
@@ -37,10 +35,10 @@ import org.geotools.data.Query;
 import org.geotools.data.ServiceInfo;
 import org.geotools.data.Transaction;
 import org.geotools.data.simple.SimpleFeatureSource;
+import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureTypes;
 import org.geotools.feature.NameImpl;
-import org.geotools.feature.SchemaException;
 import org.opengis.feature.FeatureFactory;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -96,6 +94,7 @@ import com.vividsolutions.jts.geom.GeometryFactory;
  * </p>
  * @author Jody Garnett, Refractions Research Inc.
  * @author Justin Deoliveira, The Open Planning Project
+ * @author Niels Charlier
  *
  *
  *
@@ -163,6 +162,8 @@ public abstract class ContentDataStore implements DataStore {
         this.LOGGER = org.geotools.util.logging.Logging.getLogger(
             getClass().getPackage().getName()
         );
+        //default
+        setFilterFactory(CommonFactoryFinder.getFilterFactory());
     }
 
     //
@@ -349,7 +350,7 @@ public abstract class ContentDataStore implements DataStore {
      */
     public ContentFeatureSource getFeatureSource(String typeName)
         throws IOException {
-        return getFeatureSource(new NameImpl(namespaceURI,typeName), Transaction.AUTO_COMMIT);
+        return getFeatureSource(new NameImpl(null, typeName), Transaction.AUTO_COMMIT);
     }
 
     /**
@@ -365,7 +366,7 @@ public abstract class ContentDataStore implements DataStore {
      */
     public ContentFeatureSource getFeatureSource(String typeName, Transaction tx) 
         throws IOException {
-        return getFeatureSource( name(typeName), tx );
+        return getFeatureSource( new NameImpl(null, typeName), tx );
     }
     
     /**
@@ -508,7 +509,7 @@ public abstract class ContentDataStore implements DataStore {
      * entry exists.
      */
     public ContentEntry getEntry( Name name ) {
-        return (ContentEntry) entries.get(name);
+        return entries.get(name);
     }
 
     //
@@ -531,12 +532,13 @@ public abstract class ContentDataStore implements DataStore {
     }
     
     /**
+     * 
      * Helper method to wrap a non-qualified name.
      */
     final protected Name name(String typeName) {
-        return new NameImpl(namespaceURI,typeName);
+        return new NameImpl(namespaceURI, typeName);
     }
-
+   
     /**
      * Helper method to look up an entry in the datastore.
      * <p>
@@ -556,25 +558,46 @@ public abstract class ContentDataStore implements DataStore {
     final protected ContentEntry entry(Name name) throws IOException {
         ContentEntry entry = null;
 
-        //do we already know about the entry
-        if (!entries.containsKey(name)) {
-            //is this type available?
-            List<Name> typeNames = createTypeNames();
-
-            if (typeNames.contains(name)) {
-                //yes, create an entry for it
-                synchronized (this) {
-                    if (!entries.containsKey(name)) {
-                        entry = new ContentEntry(this, name);
-                        entries.put(name, entry);
-                    }
-                }
-
-                entry = (ContentEntry) entries.get(name);
+        boolean found = entries.containsKey(name);
+        if (!found && name.getNamespaceURI() == null
+                && this.namespaceURI != null) {
+            Name defaultNsName = new NameImpl(namespaceURI, name.getLocalPart());
+            if (entries.containsKey(defaultNsName)) {
+                name = defaultNsName;
+                found = true;
             }
         }
 
-        return (ContentEntry) entries.get(name);
+        // try a namespace-less match (createTypeNames() can be expensive, we leave it as last
+        // resort)
+        if (!found) {
+            List<Name> typeNames = createTypeNames();
+            found = typeNames.contains(name);
+            if (!found && name.getNamespaceURI() == null) {
+                for (Name typeName : typeNames) {
+                    if (typeName.getLocalPart().equals(name.getLocalPart())) {
+                        name = typeName;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (found) {
+            // yes, create an entry for it
+            synchronized (this) {
+                if (!entries.containsKey(name)) {
+                    entry = new ContentEntry(this, name);
+                    entries.put(name, entry);
+                }
+            }
+
+            entry = entries.get(name);
+        }
+
+
+        return entries.get(name);
     }
 
     /**
@@ -598,7 +621,18 @@ public abstract class ContentDataStore implements DataStore {
 
         return entry;
     }
-    
+
+    /**
+     * Helper method to remove an entry from the cached entry map.
+     *
+     * @param name The name of the entry.
+     */
+    final protected void removeEntry(Name name) {
+        if (entries.containsKey(name)) {
+            entries.remove(name);
+        }
+    }
+
     /**
      * Creates a set of qualified names corresponding to the types that the
      * datastore provides.
@@ -641,15 +675,14 @@ public abstract class ContentDataStore implements DataStore {
 
     
     /**
-     * Delegates to {@link #getFeatureSource(String)} with
-     * {@code name.getLocalPart()}
+     * Delegates to {@link #getFeatureSource(Name, Transaction)} 
      * 
      * @since 2.5
      * @see DataAccess#getFeatureSource(Name)
      */
     public SimpleFeatureSource getFeatureSource(Name typeName)
             throws IOException {
-        return getFeatureSource(typeName.getLocalPart());
+        return getFeatureSource(typeName, Transaction.AUTO_COMMIT);
     }
 
     /**
@@ -687,5 +720,19 @@ public abstract class ContentDataStore implements DataStore {
      */
     public void updateSchema(Name typeName, SimpleFeatureType featureType) throws IOException {
         updateSchema(typeName.getLocalPart(), featureType);
+    }
+
+    /**
+     * @see DataAccess#removeSchema(Name)
+     */
+    public void removeSchema(Name typeName) throws IOException {
+        throw new UnsupportedOperationException("Schema removal not supported");
+    }
+
+    /**
+     * @see DataStore#removeSchema(String)
+     */
+    public void removeSchema(String typeName) throws IOException {
+        throw new UnsupportedOperationException("Schema removal not supported");
     }
 }

@@ -21,7 +21,6 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
-import java.awt.image.RenderedImage;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
@@ -57,8 +56,8 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.cs.AxisDirection;
 import org.opengis.referencing.cs.CoordinateSystem;
 import org.opengis.referencing.cs.CoordinateSystemAxis;
+import org.opengis.referencing.operation.CoordinateOperation;
 import org.opengis.referencing.operation.CoordinateOperationFactory;
-import org.opengis.referencing.operation.MathTransform;
 import org.opengis.referencing.operation.TransformException;
 
 import com.vividsolutions.jts.geom.Envelope;
@@ -340,39 +339,40 @@ public class ImageMosaicJDBCReader extends AbstractGridCoverage2DReader {
             /** Buffered factory for coordinate operations. */
 
             // transforming the envelope back to the dataset crs in
-            final MathTransform transform = operationFactory.createOperation(
-                    state.getRequestedEnvelope().getCoordinateReferenceSystem(), crs)
-                    .getMathTransform();
+            CoordinateOperation op = operationFactory.createOperation(state.getRequestedEnvelope()
+                    .getCoordinateReferenceSystem(), crs);
 
-            if (transform.isIdentity()) { // Identity Transform ?
+            if (op.getMathTransform().isIdentity()) { // Identity Transform ?
                 state.setRequestEnvelopeTransformed(state.getRequestedEnvelope());
                 return; // and finish
             }
 
-            state.setRequestEnvelopeTransformed(CRS.transform(transform, state
+            state.setRequestEnvelopeTransformed(CRS.transform(op, state
                     .getRequestedEnvelope()));
             state.getRequestEnvelopeTransformed().setCoordinateReferenceSystem(crs);
 
-            int indexX = indexOfX(crs);
-            int indexY = indexOfY(crs);
-            int indexRequestedX = indexOfX(state.getRequestedEnvelope()
-                    .getCoordinateReferenceSystem());
-            int indexRequestedY = indexOfY(state.getRequestedEnvelope()
-                    .getCoordinateReferenceSystem());
-
-            // x Axis problem ???
-            if (indexX == indexRequestedY && indexY == indexRequestedX) {
-                state.setXAxisSwitch(true);
-                Rectangle2D tmp = new Rectangle2D.Double(state.getRequestEnvelopeTransformed()
-                        .getMinimum(1), state.getRequestEnvelopeTransformed().getMinimum(0), state
-                        .getRequestEnvelopeTransformed().getSpan(1), state
-                        .getRequestEnvelopeTransformed().getSpan(0));
-                state.setRequestEnvelopeTransformed(new GeneralEnvelope(tmp));
-                state.getRequestEnvelopeTransformed().setCoordinateReferenceSystem(crs);
-            } else if (indexX == indexRequestedX && indexY == indexRequestedY) {
-                // everything is fine
-            } else {
-                throw new DataSourceException("Unable to resolve the X Axis problem");
+            if (config.getIgnoreAxisOrder()==false) { // check for axis order required
+                int indexX = indexOfX(crs);
+                int indexY = indexOfY(crs);
+                int indexRequestedX = indexOfX(state.getRequestedEnvelope()
+                        .getCoordinateReferenceSystem());
+                int indexRequestedY = indexOfY(state.getRequestedEnvelope()
+                        .getCoordinateReferenceSystem());
+    
+                // x Axis problem ???
+                if (indexX == indexRequestedY && indexY == indexRequestedX) {
+                    state.setXAxisSwitch(true);
+                    Rectangle2D tmp = new Rectangle2D.Double(state.getRequestEnvelopeTransformed()
+                            .getMinimum(1), state.getRequestEnvelopeTransformed().getMinimum(0), state
+                            .getRequestEnvelopeTransformed().getSpan(1), state
+                            .getRequestEnvelopeTransformed().getSpan(0));
+                    state.setRequestEnvelopeTransformed(new GeneralEnvelope(tmp));
+                    state.getRequestEnvelopeTransformed().setCoordinateReferenceSystem(crs);
+                } else if (indexX == indexRequestedX && indexY == indexRequestedY) {
+                    // everything is fine
+                } else {
+                    throw new DataSourceException("Unable to resolve the X Axis problem");
+                }
             }
 
             if (LOGGER.isLoggable(Level.FINE)) {
@@ -414,13 +414,14 @@ public class ImageMosaicJDBCReader extends AbstractGridCoverage2DReader {
         // /////////////////////////////////////////////////////////////////////
         if (!state.getRequestEnvelopeTransformed().intersects(this.originalEnvelope, true)) {
             LOGGER
-                    .warning("The requested envelope does not intersect the envelope of this mosaic, result is a nodata image");
+                    .warning("The requested envelope does not intersect the envelope of this mosaic");
             LOGGER.warning(state.getRequestEnvelopeTransformed().toString());
             LOGGER.warning(originalEnvelope.toString());
 
-            return coverageFactory.create(coverageName, getEmptyImage((int) pixelDimension
-                    .getWidth(), (int) pixelDimension.getHeight(), backgroundColor, outputTransparentColor), state
-                    .getRequestedEnvelope());
+//            return coverageFactory.create(coverageName, getEmptyImage((int) pixelDimension
+//                    .getWidth(), (int) pixelDimension.getHeight(), backgroundColor, outputTransparentColor), state
+//                    .getRequestedEnvelope());
+            return null;
         }
 
         // /////////////////////////////////////////////////////////////////////

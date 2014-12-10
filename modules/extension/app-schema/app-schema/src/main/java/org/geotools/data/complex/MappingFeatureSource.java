@@ -31,9 +31,13 @@ import org.geotools.data.Query;
 import org.geotools.data.QueryCapabilities;
 import org.geotools.data.ResourceInfo;
 import org.geotools.data.joining.JoiningQuery;
+import org.geotools.factory.Hints;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
+import org.geotools.filter.FilterCapabilities;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.jdbc.JDBCFeatureSource;
+import org.geotools.jdbc.JDBCFeatureStore;
 import org.opengis.feature.Feature;
 import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.FeatureType;
@@ -84,8 +88,16 @@ public class MappingFeatureSource implements FeatureSource<FeatureType, Feature>
     private Query namedQuery(Filter filter, int countLimit) {
         return namedQuery(filter, countLimit, false);
     }
-
+    
+    private Query namedQuery(Filter filter, int countLimit, Hints hints) {
+        return namedQuery(filter, countLimit, false, hints);
+    }
+    
     private Query namedQuery(Filter filter, int countLimit, boolean isJoining) {
+    	return namedQuery(filter, countLimit, isJoining, null);    	
+    }
+
+    private Query namedQuery(Filter filter, int countLimit, boolean isJoining, Hints hints) {
        Query query = isJoining ? new JoiningQuery() : new Query();
         if (getName().getNamespaceURI() != null) {
             try {
@@ -97,8 +109,9 @@ public class MappingFeatureSource implements FeatureSource<FeatureType, Feature>
         query.setTypeName(getName().getLocalPart());
         query.setFilter(filter);
         query.setMaxFeatures(countLimit);
+        query.setHints(hints);
         return query;
-    }
+    }    
 
     private Query namedQuery(Query query) {
         Query namedQuery = namedQuery(query.getFilter(), query.getMaxFeatures(), query instanceof JoiningQuery);        
@@ -107,6 +120,7 @@ public class MappingFeatureSource implements FeatureSource<FeatureType, Feature>
         namedQuery.setCoordinateSystemReproject(query.getCoordinateSystemReproject());
         namedQuery.setHandle(query.getHandle());
         namedQuery.setMaxFeatures(query.getMaxFeatures());
+        namedQuery.setStartIndex(query.getStartIndex());
         namedQuery.setSortBy(query.getSortBy());
         namedQuery.setHints(query.getHints());
         if (query instanceof JoiningQuery) {
@@ -121,8 +135,12 @@ public class MappingFeatureSource implements FeatureSource<FeatureType, Feature>
     }
 
     public int getCount(Query query) throws IOException {
+        int count = 0;
         Query namedQuery = namedQuery(query);
-        int count = store.getCount(namedQuery);
+        FeatureSource mappedSource = mapping.getSource();
+        if (!(mappedSource instanceof JDBCFeatureSource || mappedSource instanceof JDBCFeatureStore)) {
+            count = store.getCount(namedQuery);
+        }
         if (count >= 0) {
             // normal case
             return count;
@@ -168,6 +186,10 @@ public class MappingFeatureSource implements FeatureSource<FeatureType, Feature>
     public FeatureCollection<FeatureType, Feature> getFeatures(Filter filter) throws IOException {
         return new MappingFeatureCollection(store, mapping, namedQuery(filter, Integer.MAX_VALUE));
     }
+    
+    public FeatureCollection<FeatureType, Feature> getFeatures(Filter filter, Hints hints) throws IOException {
+        return new MappingFeatureCollection(store, mapping, namedQuery(filter, Integer.MAX_VALUE, hints));
+    }
 
     public FeatureCollection<FeatureType, Feature> getFeatures() throws IOException {
         return new MappingFeatureCollection(store, mapping, namedQuery(Filter.INCLUDE,
@@ -200,7 +222,7 @@ public class MappingFeatureSource implements FeatureSource<FeatureType, Feature>
      * @see org.geotools.data.FeatureSource#getQueryCapabilities()
      */
     public QueryCapabilities getQueryCapabilities() {
-        return new QueryCapabilities();
+        return mapping.getSource().getQueryCapabilities();
     }
 
 }

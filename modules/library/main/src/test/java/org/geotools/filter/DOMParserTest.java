@@ -18,6 +18,7 @@ package org.geotools.filter;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -28,13 +29,18 @@ import junit.framework.TestSuite;
 import org.geotools.feature.SchemaException;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
+import org.geotools.referencing.CRS;
 import org.geotools.test.TestData;
 import org.opengis.filter.Filter;
+import org.opengis.filter.Id;
 import org.opengis.filter.PropertyIsNotEqualTo;
 import org.opengis.filter.expression.Literal;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.spatial.Beyond;
+import org.opengis.filter.spatial.Crosses;
 import org.opengis.filter.spatial.DWithin;
+import org.opengis.filter.spatial.Intersects;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -42,7 +48,9 @@ import org.w3c.dom.NodeList;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.Polygon;
 
 /**
  * Tests for the DOM parser.
@@ -237,14 +245,34 @@ public class DOMParserTest extends FilterTestSupport {
         LOGGER.fine("parsed filter is " + test);
     }
 
+    public void testCrosses() throws Exception {
+        Filter test = parseDocument("crosses.xml");
+        assertTrue(test instanceof Crosses);
+        Crosses cr = (Crosses) test;
+        assertEquals("the_geom", ((PropertyName) cr.getExpression1()).getPropertyName());
+        assertTrue(((Literal) cr.getExpression2()).getValue() instanceof LineString);
+        LOGGER.fine("parsed filter is " + test);
+    }
+    
+    public void testIntersectsCRS() throws Exception {
+        Filter test = parseDocument("intersectsCRS.xml");
+        assertTrue(test instanceof Intersects);
+        Intersects cr = (Intersects) test;
+        assertEquals("geom", ((PropertyName) cr.getExpression1()).getPropertyName());
+        Polygon p = (Polygon) ((Literal) cr.getExpression2()).getValue();
+        assertTrue(p.getUserData() instanceof CoordinateReferenceSystem);
+        int epsg = CRS.lookupEpsgCode((CoordinateReferenceSystem) p.getUserData(), false);
+        assertEquals(32631, epsg);
+    }
+
     public void test28() throws Exception {
-        FidFilter filter = (FidFilter) parseDocumentFirst("test28.xml");
-        String[] fids = filter.getFids();
-        List list = Arrays.asList(fids);
-        assertEquals(3, fids.length);
-        assertTrue(list.contains("FID.3"));
-        assertTrue(list.contains("FID.2"));
-        assertTrue(list.contains("FID.1"));
+        Id filter = (Id) parseDocumentFirst("test28.xml");
+        Set<Object> fids = filter.getIDs();
+        
+        assertEquals(3, fids.size());
+        assertTrue(fids.contains("FID.3"));
+        assertTrue(fids.contains("FID.2"));
+        assertTrue(fids.contains("FID.1"));
     }
     
     public void testNotEqual() throws Exception {

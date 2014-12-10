@@ -201,6 +201,12 @@ public class XMLConfigDigester {
         digester.addCallMethod(typeMapping + "/isXmlDataStore", "setXmlDataStore", 1);
         digester.addCallParam(typeMapping + "/isXmlDataStore", 0);
 
+        // isDenormalised is a flag to indicate if its safe to apply the system configured
+        // maxFeatures limit when constructing SQL queries (isDenormalsed = false).
+        digester.addCallMethod(typeMapping + "/isDenormalised", "setIsDenormalised", 1);
+        digester.addCallParam(typeMapping + "/isDenormalised", 0);
+
+
         // create attribute mappings
         final String attMappings = typeMapping + "/attributeMappings";
         digester.addObjectCreate(attMappings, XMLConfigDigester.CONFIG_NS_URI, ArrayList.class);
@@ -222,6 +228,12 @@ public class XMLConfigDigester {
 
         digester.addCallMethod(attMap + "/isMultiple", "setMultiple", 1);
         digester.addCallParam(attMap + "/isMultiple", 0);
+        
+        digester.addCallMethod(attMap + "/encodeIfEmpty", "setEncodeIfEmpty", 1);
+        digester.addCallParam(attMap + "/encodeIfEmpty", 0);
+        
+        digester.addCallMethod(attMap + "/isList", "setList", 1);
+        digester.addCallParam(attMap + "/isList", 0);
 
         digester.addCallMethod(attMap + "/targetAttribute", "setTargetAttributePath", 1);
         digester.addCallParam(attMap + "/targetAttribute", 0);
@@ -235,6 +247,9 @@ public class XMLConfigDigester {
 
         digester.addCallMethod(attMap + "/sourceExpression/OCQL", "setSourceExpression", 1);
         digester.addCallParam(attMap + "/sourceExpression/OCQL", 0);
+        
+        digester.addCallMethod(attMap + "/sourceExpression/index", "setSourceIndex", 1);
+        digester.addCallParam(attMap + "/sourceExpression/index", 0);
 
         digester.addCallMethod(attMap + "/idExpression/inputAttribute", "setIdentifierPath", 1);
         digester.addCallParam(attMap + "/idExpression/inputAttribute", 0);

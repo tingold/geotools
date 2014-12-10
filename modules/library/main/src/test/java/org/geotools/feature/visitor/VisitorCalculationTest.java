@@ -16,14 +16,21 @@
  */
 package org.geotools.feature.visitor;
 
+import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.TimeZone;
 
 import org.geotools.data.DataTestCase;
 import org.geotools.data.DataUtilities;
+import org.geotools.data.collection.ListFeatureCollection;
+import org.geotools.data.collection.TreeSetFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.feature.FeatureCollections;
@@ -37,6 +44,8 @@ import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.filter.FilterFactory;
 import org.opengis.filter.expression.Expression;
+import org.opengis.filter.expression.PropertyName;
+import org.opengis.filter.sort.SortBy;
 
 import com.vividsolutions.jts.geom.Envelope;
 
@@ -49,6 +58,7 @@ import com.vividsolutions.jts.geom.Envelope;
 public class VisitorCalculationTest extends DataTestCase {
 	SimpleFeatureCollection empty;
     SimpleFeatureCollection fc;
+    SimpleFeatureCollection invfc;
     SimpleFeatureType ft;
     SimpleFeatureCollection fc2;
     SimpleFeatureType ft2;
@@ -63,6 +73,7 @@ public class VisitorCalculationTest extends DataTestCase {
         super.setUp();
         empty = FeatureCollections.newCollection();
         fc = DataUtilities.collection(roadFeatures);
+        invfc = new TreeSetFeatureCollection(fc).sort(SortBy.REVERSE_ORDER);
         fc2 = DataUtilities.collection(riverFeatures);
         ft = roadType;
         ft2 = riverType;
@@ -327,6 +338,54 @@ public class VisitorCalculationTest extends DataTestCase {
         assertSame(averageResult2, averageResult2.merge(averageVisitor.getResult()));
     }
     
+    public void testUniquePreserveOrder() throws IOException {
+        UniqueVisitor uniqueVisitor = new UniqueVisitor(0, ft);
+        uniqueVisitor.setPreserveOrder(true);
+        fc.accepts(uniqueVisitor, null);
+        Set value1 = uniqueVisitor.getResult().toSet();
+        assertEquals(1, value1.iterator().next());
+        
+        uniqueVisitor.reset();
+        invfc.accepts(uniqueVisitor, null);
+        value1 = uniqueVisitor.getResult().toSet();
+        assertEquals(3, value1.iterator().next());
+    }
+    
+    public void testUniquePagination() throws IOException {
+        UniqueVisitor uniqueVisitor = new UniqueVisitor(0, ft);
+        uniqueVisitor.setPreserveOrder(true);
+        uniqueVisitor.setStartIndex(0);
+        uniqueVisitor.setMaxFeatures(1);
+        fc.accepts(uniqueVisitor, null);
+        Set value1 = uniqueVisitor.getResult().toSet();
+        assertEquals(1, value1.size());
+        assertEquals(1, value1.iterator().next());
+        
+        uniqueVisitor.reset();
+        uniqueVisitor.setStartIndex(1);
+        uniqueVisitor.setMaxFeatures(2);
+        fc.accepts(uniqueVisitor, null);
+        value1 = uniqueVisitor.getResult().toSet();
+        assertEquals(2, value1.size());
+        assertEquals(2, value1.iterator().next());
+        
+        uniqueVisitor.reset();
+        uniqueVisitor.setStartIndex(2);
+        uniqueVisitor.setMaxFeatures(2);
+        fc.accepts(uniqueVisitor, null);
+        value1 = uniqueVisitor.getResult().toSet();
+        assertEquals(1, value1.size());
+        assertEquals(3, value1.iterator().next());
+        
+        uniqueVisitor.reset();
+        uniqueVisitor.setStartIndex(3);
+        uniqueVisitor.setMaxFeatures(2);
+        fc.accepts(uniqueVisitor, null);
+        value1 = uniqueVisitor.getResult().toSet();
+        // the UniqueVisitor returns null if the list of values is null
+        assertNull(value1);
+    }
+    
     public void testUnique() throws IllegalFilterException, IOException {
         UniqueVisitor uniqueVisitor = new UniqueVisitor(0, ft);
         fc.accepts(uniqueVisitor, null);
@@ -424,7 +483,7 @@ public class VisitorCalculationTest extends DataTestCase {
     	fc3.accepts(visit1, null);
     	CalcResult result = visit1.getResult();
 		double average = result.toDouble();
-    	System.out.println("AV="+average);
+    	
     	StandardDeviationVisitor visit2 = new StandardDeviationVisitor(expr, average);
     	fc3.accepts(visit2, null);
     	assertEquals(28.86, visit2.getResult().toDouble(), 0.01); 
@@ -474,5 +533,62 @@ public class VisitorCalculationTest extends DataTestCase {
         } catch (Exception e) {
             assertEquals("Parameter is not a compatible type", e.getMessage());
 		}
+    }
+    
+    public void testNearest() throws Exception {
+        SimpleFeatureType type = DataUtilities.createType("nearestTest","name:String,size:int,flow:double,event:java.util.Date,data:java.io.File");
+        ListFeatureCollection fc = new ListFeatureCollection(type);
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-mm-dd", Locale.ENGLISH);
+        df.setTimeZone(TimeZone.getTimeZone("GMT"));
+        fc.add(SimpleFeatureBuilder.build(type, new Object[] {"abc", 10, 10.5, df.parse("2014-12-10"), new File("/tmp/test.txt")}, null));
+        fc.add(SimpleFeatureBuilder.build(type, new Object[] {"ade", 5, 3.5, df.parse("2012-11-10"), new File("/tmp/abc.txt")}, null));
+        fc.add(SimpleFeatureBuilder.build(type, new Object[] {"zaa", 2, 50.4, df.parse("2010-11-10"), new File("/tmp/zaa.txt")}, null));
+
+        // test on integer
+        testNearest(fc, "size", 5, 5); // exact match
+        testNearest(fc, "size", 1, 2); // below min
+        testNearest(fc, "size", 3, 2); // mid
+        testNearest(fc, "size", 15, 10); // above max
+        
+        // test on double
+        testNearest(fc, "flow", 3.5, 3.5); // exact match
+        testNearest(fc, "flow", 1d, 3.5); // below min
+        testNearest(fc, "flow", 10d, 10.5); // mid
+        testNearest(fc, "flow", 100d, 50.4); // above max
+        
+        // test on date
+        testNearest(fc, "event", df.parse("2014-12-10"), df.parse("2014-12-10")); // exact match
+        testNearest(fc, "event", df.parse("2009-11-10"), df.parse("2010-11-10")); // below min
+        testNearest(fc, "event", df.parse("2010-11-11"), df.parse("2010-11-10")); // mid
+        testNearest(fc, "event", df.parse("2015-12-10"), df.parse("2014-12-10")); // above max
+        
+        // test on string
+        testNearest(fc, "name", "ade", "ade"); // exact match
+        testNearest(fc, "name", "aaa", "abc"); // below min
+        testNearest(fc, "name", "mfc", "ade", "zaa"); // mid, both values could match
+        testNearest(fc, "name", "zzz", "zaa"); // above max
+        
+        // test on random comparable (a file)
+        testNearest(fc, "data", new File("/tmp/test.txt"), new File("/tmp/test.txt")); // exact match
+        testNearest(fc, "data", new File("/tmp/aaa.txt"), new File("/tmp/abc.txt")); // below min
+        testNearest(fc, "data", new File("/tmp/mfc.txt"), new File("/tmp/abc.txt"), new File("/tmp/test.txt")); // mid, both values could match
+        testNearest(fc, "data", new File("/tmp/zzz.txt"), new File("/tmp/zaa.txt")); // above max
+    }
+    
+    private void testNearest(SimpleFeatureCollection fc, String attributeName, Object target, Object... validResults) throws IOException {
+        PropertyName expr = ff.property(attributeName);
+        NearestVisitor visitor = new NearestVisitor(expr, target);
+        fc.accepts(visitor, null); 
+        Object nearestMatch = visitor.getNearestMatch();
+        if(validResults.length == 0) {
+            assertNull(nearestMatch);
+        } else {
+            boolean found = false;
+            for (Object object : validResults) {
+                found |= object != null ? (object.equals(nearestMatch)) : nearestMatch == null;
+            }
+            
+            assertTrue("Could match nearest " + nearestMatch + " among valid values " + Arrays.asList(validResults), found);
+        }
     }
 }

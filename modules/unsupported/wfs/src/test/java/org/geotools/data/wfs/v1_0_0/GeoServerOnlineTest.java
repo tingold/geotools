@@ -20,17 +20,19 @@ package org.geotools.data.wfs.v1_0_0;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ConnectException;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.NoRouteToHostException;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -48,13 +50,17 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.data.simple.SimpleFeatureStore;
+import org.geotools.data.wfs.WFSDataStore;
 import org.geotools.data.wfs.WFSDataStoreFactory;
+import org.geotools.data.wfs.protocol.http.HttpMethod;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.factory.GeoTools;
+import org.geotools.factory.Hints;
 import org.geotools.feature.IllegalAttributeException;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.filter.IllegalFilterException;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.wfs.protocol.ConnectionFactory;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -69,6 +75,7 @@ import org.opengis.filter.expression.Expression;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.identity.FeatureId;
 import org.opengis.filter.spatial.BBOX;
+import org.opengis.geometry.BoundingBox;
 import org.xml.sax.SAXException;
 
 import com.vividsolutions.jts.geom.Coordinate;
@@ -157,17 +164,15 @@ public class GeoServerOnlineTest {
                     "work already");
             features = source.getFeatures(query);
             features.size();
-            Iterator reader = features.iterator();
-            while (reader.hasNext()) {
-                SimpleFeature feature = (SimpleFeature) reader.next();
-            }
-            features.close(reader);
-
             SimpleFeatureIterator iterator = features.features();
-            while (iterator.hasNext()) {
-                SimpleFeature feature = iterator.next();
+            try {
+                while (iterator.hasNext()) {
+                    SimpleFeature feature = (SimpleFeature) iterator.next();
+                }
             }
-            features.close(iterator);
+            finally {
+                iterator.close();
+            }
         }
     }
 
@@ -206,18 +211,11 @@ public class GeoServerOnlineTest {
         features = source.getFeatures(query);
         features.size();
 
-        Iterator reader = features.iterator();
-        while (reader.hasNext()) {
-            SimpleFeature feature = (SimpleFeature) reader.next();
-            System.out.println(feature);
-        }
-        features.close(reader);
-
         SimpleFeatureIterator iterator = features.features();
         while (iterator.hasNext()) {
             SimpleFeature feature = iterator.next();
         }
-        features.close(iterator);
+        iterator.close();
     }
 
     public void XtestFeatureType() throws NoSuchElementException, IOException, SAXException {
@@ -303,6 +301,10 @@ public class GeoServerOnlineTest {
             public MatchAction getMatchAction() {
                 return MatchAction.ANY;
             }
+
+			public BoundingBox getBounds() {
+				return bbox.getBounds();
+			}
         };
         
         final Query query = new Query(ft.getTypeName());
@@ -490,6 +492,109 @@ public class GeoServerOnlineTest {
             }
         }
     }
+    
+    @Test
+    public void testVendorParametersGet() throws Exception {
+        testVendorParameters(Boolean.FALSE);
+    }
+    
+    @Test
+    public void testVendorParametersPost() throws Exception {
+        testVendorParameters(Boolean.TRUE);
+    }
+    
+    @Test
+    public void testSimplifyFilter() throws Exception {
+        if (url == null)
+            return;
+        Map m = new HashMap();
+        m.put(WFSDataStoreFactory.URL.key, url);
+        m.put(WFSDataStoreFactory.TIMEOUT.key, new Integer(100000));
+        WFS_1_0_0_DataStore wfs = (WFS_1_0_0_DataStore) (new WFSDataStoreFactory())
+                .createDataStore(m);
+        FilterFactory2 ff = CommonFactoryFinder.getFilterFactory2(GeoTools.getDefaultHints());
+
+        WFSFeatureSource fs = wfs.getFeatureSource("topp:states");
+        
+        // build a filter with bits that cannot be encoded in OGC filter, but can be simplified
+        // to one that can
+        Filter f = ff.or(Arrays.asList(Filter.EXCLUDE, ff.and(Filter.INCLUDE, ff.greater(ff.property("PERSONS"), ff.literal(10000000)))));
+        SimpleFeatureCollection fc = fs.getFeatures(f);
+        
+        // force calling a HITS query, it used to throw an exception
+        int size = fc.size();
+        
+        // force making a GetFeature, it used to blow up
+        SimpleFeatureIterator fi = null;
+        try {
+            fi = fc.features();
+            if(fi.hasNext()) {
+                fi.next();
+            }
+        } finally {
+            if(fi != null) {
+                fi.close();
+            }
+        }
+    }
+
+    private void testVendorParameters(Boolean usePost) throws IOException {
+        if (url == null)
+            return;
+        
+        Map m = new HashMap();
+        m.put(WFSDataStoreFactory.URL.key, url);
+        m.put(WFSDataStoreFactory.TIMEOUT.key, new Integer(100000));
+        m.put(WFSDataStoreFactory.PROTOCOL.key, usePost);
+        WFS_1_0_0_DataStore wfs = (WFS_1_0_0_DataStore) (new WFSDataStoreFactory())
+                .createDataStore(m);
+
+        final WFS100ProtocolHandler originalHandler = wfs.protocolHandler;
+        wfs.protocolHandler = new WFS100ProtocolHandler(null, originalHandler.getConnectionFactory()) {
+            @Override
+            protected WFSCapabilities parseCapabilities(InputStream capabilitiesReader)
+                    throws IOException {
+                return originalHandler.getCapabilities();
+            }
+            
+            @Override
+            public ConnectionFactory getConnectionFactory() {
+                return new ConnectionFactoryWrapper(super.getConnectionFactory()) {
+                    
+                    @Override
+                    public HttpURLConnection getConnection(URL query, HttpMethod method)
+                            throws IOException {
+                        String[] keyValueArray = query.getQuery().split("&");
+                        Map<String, String> kvp = new HashMap<String, String>();
+                        for (String keyValue : keyValueArray) {
+                            String[] skv = keyValue.split("=");
+                            kvp.put(skv[0], skv[1]);
+                        }
+                        
+                        // check the vendor params actually made it into the url
+                        assertEquals("true", kvp.get("strict"));
+                        assertEquals("mysecret", kvp.get("authkey"));
+                        assertEquals("low%3A2000000%3Bhigh%3A5000000", kvp.get("viewparams"));
+                        
+                        return super.getConnection(query, method);
+                    }
+                };
+            }
+        };
+
+        Map<String, String> vparams = new HashMap<String, String>();
+        vparams.put("authkey", "mysecret");
+        vparams.put("viewparams", "low:2000000;high:5000000");
+        vparams.put("strict", "true");
+        Hints hints = new Hints(WFSDataStore.WFS_VENDOR_PARAMETERS, vparams);
+        Query q = new Query("topp:states");
+        q.setHints(hints);
+        
+        // try with 
+        FeatureReader fr = wfs.getFeatureReader(q, Transaction.AUTO_COMMIT);
+        assertTrue(fr.hasNext());
+        fr.close();
+    }
 
     private Id createFidFilter(SimpleFeatureSource fs)
             throws IOException {
@@ -508,4 +613,6 @@ public class GeoServerOnlineTest {
             iter.close();
         }
     }
+    
+    
 }

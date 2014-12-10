@@ -30,8 +30,9 @@ import javax.xml.namespace.QName;
 
 import org.geotools.data.complex.AttributeMapping;
 import org.geotools.data.complex.FeatureTypeMapping;
-import org.geotools.data.complex.filter.XPath.Step;
-import org.geotools.data.complex.filter.XPath.StepList;
+import org.geotools.data.complex.NestedAttributeMapping;
+import org.geotools.data.complex.filter.XPathUtil.Step;
+import org.geotools.data.complex.filter.XPathUtil.StepList;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.filter.NestedAttributeExpression;
 import org.opengis.feature.type.AttributeDescriptor;
@@ -197,10 +198,13 @@ public class UnmappingFilterVisitor implements org.opengis.filter.FilterVisitor,
         int index = 0;
         for (Iterator lefts = leftExpressions.iterator(); lefts.hasNext();) {
             left = (Expression) lefts.next();
+            int rightIndex = 0;
             for (Iterator rights = rightExpressions.iterator(); rights.hasNext();) {
+                index = index + rightIndex;
                 right = (Expression) rights.next();
                 product[index][0] = left;
                 product[index][1] = right;
+                rightIndex++;
             }
             index++;
         }
@@ -532,8 +536,10 @@ public class UnmappingFilterVisitor implements org.opengis.filter.FilterVisitor,
 
         for (Iterator it = sourceNames.iterator(); it.hasNext();) {
             Expression sourceName = (Expression) it.next();
-            Filter unrolled = ff.bbox(sourceName, filter.getMinX(), filter.getMinY(), filter
-                    .getMaxX(), filter.getMaxY(), filter.getSRS(), filter.getMatchAction());
+            Filter unrolled;
+            
+            unrolled = ff.bbox(sourceName, filter.getBounds(), filter.getMatchAction());
+            
             combined.add(unrolled);
         }
 
@@ -802,20 +808,25 @@ public class UnmappingFilterVisitor implements org.opengis.filter.FilterVisitor,
         return combinedExpressions;
     }
 
-    public Object visit(PropertyName expr, Object arg1) {
-
+    public List<Expression> visit(PropertyName expr, Object arg1) {
         String targetXPath = expr.getPropertyName();
         NamespaceSupport namespaces = mappings.getNamespaces();
         AttributeDescriptor root = mappings.getTargetFeature();
 
+        List<NestedAttributeMapping> nestedMappings = mappings.getNestedMappings();
         // break into single steps
         StepList simplifiedSteps = XPath.steps(root, targetXPath, namespaces);
 
-        List<Expression> matchingMappings = mappings.findMappingsFor(simplifiedSteps);
+        List<Expression> matchingMappings = mappings.findMappingsFor(simplifiedSteps, false);
 
-        if (matchingMappings.isEmpty() && simplifiedSteps.size() > 1) {
-            // means some attributes are probably mapped separately in feature chaining
-            matchingMappings.add(new NestedAttributeExpression(targetXPath, mappings));
+        if (!nestedMappings.isEmpty()) {
+            // means some attributes are mapped separately in feature chaining
+            for (NestedAttributeMapping nestedMapping : nestedMappings) {
+                if (simplifiedSteps.startsWith(nestedMapping.getTargetXPath())) {
+                    matchingMappings.add(new NestedAttributeExpression(simplifiedSteps,
+                            nestedMapping));
+                }
+            }
         }
 
         if (matchingMappings.size() == 0) {

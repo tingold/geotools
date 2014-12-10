@@ -20,27 +20,18 @@
  */
 package org.geotools.referencing.operation.projection;
 
+import static java.lang.Math.*;
+
 import java.awt.geom.Point2D;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import javax.measure.unit.NonSI;
 import javax.measure.unit.SI;
 import javax.measure.unit.Unit;
-
-import org.opengis.parameter.InvalidParameterValueException;
-import org.opengis.parameter.GeneralParameterDescriptor;
-import org.opengis.parameter.ParameterDescriptor;
-import org.opengis.parameter.ParameterDescriptorGroup;
-import org.opengis.parameter.ParameterNotFoundException;
-import org.opengis.parameter.ParameterValueGroup;
-import org.opengis.referencing.operation.MathTransform2D;
-import org.opengis.referencing.operation.NoninvertibleTransformException;
-import org.opengis.referencing.operation.Projection;
-import org.opengis.referencing.operation.TransformException;
 
 import org.geotools.math.XMath;
 import org.geotools.measure.Latitude;
@@ -49,12 +40,20 @@ import org.geotools.metadata.iso.citation.Citations;
 import org.geotools.referencing.NamedIdentifier;
 import org.geotools.referencing.operation.MathTransformProvider;
 import org.geotools.referencing.operation.transform.AbstractMathTransform;
-import org.geotools.resources.i18n.Errors;
 import org.geotools.resources.i18n.ErrorKeys;
+import org.geotools.resources.i18n.Errors;
 import org.geotools.util.Utilities;
 import org.geotools.util.logging.Logging;
-
-import static java.lang.Math.*;
+import org.opengis.parameter.GeneralParameterDescriptor;
+import org.opengis.parameter.InvalidParameterValueException;
+import org.opengis.parameter.ParameterDescriptor;
+import org.opengis.parameter.ParameterDescriptorGroup;
+import org.opengis.parameter.ParameterNotFoundException;
+import org.opengis.parameter.ParameterValueGroup;
+import org.opengis.referencing.operation.MathTransform2D;
+import org.opengis.referencing.operation.NoninvertibleTransformException;
+import org.opengis.referencing.operation.Projection;
+import org.opengis.referencing.operation.TransformException;
 
 
 /**
@@ -87,6 +86,14 @@ import static java.lang.Math.*;
 public abstract class MapProjection extends AbstractMathTransform
         implements MathTransform2D, Serializable
 {
+
+    /**
+     * A global variable use to disable the reciprocal distance checks made when assertions are
+     * enabled. This allows tests to work in "real world" conditions, where users often ask for
+     * points that are way to far from the correct area of usage of projections
+     */
+    public static boolean SKIP_SANITY_CHECKS = false;
+
     /**
      * For cross-version compatibility.
      */
@@ -614,14 +621,32 @@ public abstract class MapProjection extends AbstractMathTransform
      * Returns the orthodromic distance between the two specified points using a spherical
      * approximation. This is used for assertions only.
      */
-    private double orthodromicDistance(final Point2D source, final Point2D target) {
-        final double y1 = toRadians(source.getY());
-        final double y2 = toRadians(target.getY());
-        final double dx = toRadians(abs(target.getX() - source.getX()) % 360);
-        double rho = sin(y1)*sin(y2) + cos(y1)*cos(y2)*cos(dx);
-        if (rho > +1) {assert rho <= +(1+EPSILON) : rho; rho = +1;}
-        if (rho < -1) {assert rho >= -(1+EPSILON) : rho; rho = -1;}
-        return acos(rho) * semiMajor;
+    protected double orthodromicDistance(final Point2D source, final Point2D target) {
+        // The orthodromic distance calculation here does not work well over short 
+        // distances, so we only use it if we believe the distance is significant.
+        if (source.distanceSq(target) > 1.0) {
+            final double y1 = toRadians(source.getY());
+            final double y2 = toRadians(target.getY());
+            final double dx = toRadians(abs(target.getX() - source.getX()) % 360);
+            double rho = sin(y1)*sin(y2) + cos(y1)*cos(y2)*cos(dx);
+            if (rho > +1) {assert rho <= +(1+EPSILON) : rho; rho = +1;}
+            if (rho < -1) {assert rho >= -(1+EPSILON) : rho; rho = -1;}
+            return acos(rho) * semiMajor;
+        } else {
+            // Otherwise we approximate using alternate means. This is based
+            // on the Haversine formula to compute the arc angle between the
+            // point (derived from S2LatLng.getDistance()) which is stable for
+            // small distances.
+            double lat1 = toRadians(source.getY());
+            double lat2 = toRadians(target.getY());
+            double lng1 = toRadians(source.getX());
+            double lng2 = toRadians(target.getX());
+            double dlat = Math.sin(0.5 * (lat2 - lat1));
+            double dlng = Math.sin(0.5 * (lng2 - lng1));
+            double x = dlat * dlat + dlng * dlng * Math.cos(lat1) * Math.cos(lat2);
+            double arcRadians = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(Math.max(0.0, 1.0 - x)));
+            return arcRadians * semiMajor;
+        }
     }
 
     /**
@@ -647,9 +672,13 @@ public abstract class MapProjection extends AbstractMathTransform
      * @param inverse {@code true} for an inverse transform instead of a direct one.
      * @return {@code true} if the two points are close enough.
      */
-    private boolean checkReciprocal(Point2D point, final Point2D target, final boolean inverse)
+    protected boolean checkReciprocal(Point2D point, final Point2D target, final boolean inverse)
             throws ProjectionException
     {
+        if (SKIP_SANITY_CHECKS) {
+            return true;
+        }
+
         if (!(point instanceof CheckPoint)) try {
             point = new CheckPoint(point);
             final double longitude;
@@ -702,6 +731,9 @@ public abstract class MapProjection extends AbstractMathTransform
     static boolean checkTransform(final double x, final double y,
                                   final Point2D expected, final double tolerance)
     {
+        if (SKIP_SANITY_CHECKS) {
+            return true;
+        }
         compare("x", expected.getX(), x, tolerance);
         compare("y", expected.getY(), y, tolerance);
         return tolerance < Double.POSITIVE_INFINITY;
@@ -1183,7 +1215,7 @@ public abstract class MapProjection extends AbstractMathTransform
             return 1;
         }
         // Be less strict when the point is near an edge.
-        return (abs(longitude) > 179) || (abs(latitude) > 89) ? 1E-1 : 1E-5;
+        return (abs(longitude) > 179) || (abs(latitude) > 89) ? 1E-1 : 3E-3;
     }
 
     /**
@@ -1201,7 +1233,7 @@ public abstract class MapProjection extends AbstractMathTransform
          * may not be reflected immediately in other threads, but the later is defined only on
          * a "best effort" basis.
          */
-        return rangeCheckSemaphore != globalRangeCheckSemaphore;
+        return rangeCheckSemaphore != globalRangeCheckSemaphore && !SKIP_SANITY_CHECKS;
     }
 
     /**

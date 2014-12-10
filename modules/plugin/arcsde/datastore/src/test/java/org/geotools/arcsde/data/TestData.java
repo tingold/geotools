@@ -38,8 +38,8 @@ import org.geotools.arcsde.session.ISessionPoolFactory;
 import org.geotools.arcsde.session.SessionPoolFactory;
 import org.geotools.arcsde.session.UnavailableConnectionException;
 import org.geotools.data.DataSourceException;
+import org.geotools.data.collection.ListFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureCollection;
-import org.geotools.feature.FeatureCollections;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.simple.SimpleFeature;
@@ -557,13 +557,13 @@ public class TestData {
      * <li>7. Shape - values:
      * <ul>
      * <li> <code>POINT(0 0)</code>
-     * <li> <code>MULTIPOINT(0 0, 180 0)</code>
-     * <li> <code>LINESTRING(0 0, 180 90)</code>
-     * <li> <code>MULTILINESTRING((-180 -90, 180 90), (-180 90, 180 -90))</code>
+     * <li> <code>MULTIPOINT(0 0, 170 0)</code>
+     * <li> <code>LINESTRING(0 0, 170 80)</code>
+     * <li> <code>"MULTILINESTRING((-170 -80, 170 80), (-170 80, 170 -80))"</code>
      * <li> <code>POLYGON((-10 -10, -10 10, 10 10, 10 -10, -10 -10))</code>
      * <li>
-     * <code>MULTIPOLYGON( ((-1 -1, -1 1, 1 1, 1 -1, -1 -1)), ((-180 -90, -180 -80, -170 -80, -170 -90, -180 -90)) )</code>
-     * <li> <code>GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 180 90))</code>
+     * <code>MULTIPOLYGON( "MULTIPOLYGON( ((-1 -1, -1 1, 1 1, 1 -1, -1 -1)), ((-170 -80, -170 -70, -160 -70, -160 -80, -170 -80)) )" )</code>
+     * <li> <code>POINT EMPTY</code>
      * <li> <code>null</code>
      * </ul>
      * </li>
@@ -706,8 +706,8 @@ public class TestData {
      */
     public SimpleFeatureCollection createTestFeatures(Class<? extends Geometry> jtsGeomType,
             int numFeatures) throws IOException, SeException {
-        SimpleFeatureCollection col = FeatureCollections.newCollection();
         SimpleFeatureType type = getDataStore().getSchema(getTempTableName());
+        ListFeatureCollection col = new ListFeatureCollection( type );
         Object[] values = new Object[type.getAttributeCount()];
 
         for (int i = 0; i < numFeatures; i++) {
@@ -728,7 +728,6 @@ public class TestData {
             SimpleFeature f = SimpleFeatureBuilder.build(type, values, null);
             col.add(f);
         }
-
         return col;
     }
 

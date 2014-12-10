@@ -2,7 +2,7 @@
  *    GeoTools - The Open Source Java GIS Toolkit
  *    http://geotools.org
  *
- *    (C) 2002-2008, Open Source Geospatial Foundation (OSGeo)
+ *    (C) 2002-2014, Open Source Geospatial Foundation (OSGeo)
  *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
@@ -16,9 +16,11 @@
  */
 package org.geotools.ows.bindings;
 
-import net.opengis.ows10.Ows10Factory;
-import net.opengis.ows10.WGS84BoundingBoxType;
+import java.util.List;
+
 import javax.xml.namespace.QName;
+
+import org.eclipse.emf.ecore.EFactory;
 import org.geotools.ows.OWS;
 import org.geotools.xml.*;
 
@@ -74,9 +76,9 @@ import org.geotools.xml.*;
  *
  * @source $URL$
  */
-public class WGS84BoundingBoxTypeBinding extends AbstractComplexEMFBinding {
-    public WGS84BoundingBoxTypeBinding(Ows10Factory factory) {
-        super(factory);
+public class WGS84BoundingBoxTypeBinding extends ComplexEMFBinding {
+    public WGS84BoundingBoxTypeBinding(EFactory factory, QName target) {
+        super(factory, target);
     }
 
     /**
@@ -106,5 +108,20 @@ public class WGS84BoundingBoxTypeBinding extends AbstractComplexEMFBinding {
         throws Exception {
         //TODO: implement and remove call to super
         return super.parse(instance, node, value);
+    }
+    
+    @Override
+    public Object getProperty(Object object, QName name) throws Exception {
+        if ("LowerCorner".equals(name.getLocalPart()) || "UpperCorner".equals(name.getLocalPart())) {
+            //JD: this is a hack to get around the fact that the encoder won't match up simple list
+            // types with a binding
+            Object value = super.getProperty(object, name);
+            if (value instanceof List) {
+                return new PositionTypeBinding().encode(value, value.toString());
+            }
+        }
+        
+        return super.getProperty(object, name);    
+        
     }
 }

@@ -16,7 +16,6 @@
  */
 package org.geotools.gml3.bindings;
 
-import java.util.Arrays;
 import java.util.List;
 
 import javax.xml.namespace.QName;
@@ -86,7 +85,6 @@ public class MultiCurveTypeBinding extends AbstractComplexBinding {
      * @generated modifiable
      */
     public Class getType() {
-        //return MultiCurve.class;
         return MultiLineString.class;
     }
 
@@ -123,10 +121,8 @@ public class MultiCurveTypeBinding extends AbstractComplexBinding {
         return gf.createMultiLineString((LineString[]) curves.toArray(new LineString[curves.size()]));
     }
 
-    public Object getProperty(Object object, QName name)
-        throws Exception {
+    public Object getProperty(Object object, QName name) throws Exception {
         if ("curveMember".equals(name.getLocalPart())) {
-            //MultiCurve multiCurve = (MultiCurve) object;
             MultiLineString multiCurve = (MultiLineString) object;
             LineString[] members = new LineString[multiCurve.getNumGeometries()];
 
@@ -134,7 +130,11 @@ public class MultiCurveTypeBinding extends AbstractComplexBinding {
                 members[i] = (LineString) multiCurve.getGeometryN(i);
             }
 
+            GML3EncodingUtils.setChildIDs(multiCurve);
+
             return members;
+        } else {
+            super.getProperty(object, name);
         }
 
         return null;

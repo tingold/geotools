@@ -1,10 +1,24 @@
+/*
+ *    GeoTools - The Open Source Java GIS Toolkit
+ *    http://geotools.org
+ *
+ *    (C) 2013, Open Source Geospatial Foundation (OSGeo)
+ *
+ *    This library is free software; you can redistribute it and/or
+ *    modify it under the terms of the GNU Lesser General Public
+ *    License as published by the Free Software Foundation;
+ *    version 2.1 of the License.
+ *
+ *    This library is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *    Lesser General Public License for more details.
+ */
 package org.geotools.gce.imagemosaic;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
 
-import java.awt.Rectangle;
 import java.io.File;
-import java.util.Arrays;
 
 import org.geotools.coverage.grid.GridEnvelope2D;
 import org.geotools.coverage.grid.GridGeometry2D;
@@ -28,10 +42,9 @@ public class RasterLayerRequestTest {
         // build the objects we need to get to build a raster layer request
         final ImageMosaicReader reader = (ImageMosaicReader) new ImageMosaicFormat().getReader(
                 testMosaic, null);
-        final RasterManager manager = new RasterManager(reader);
+        final RasterManager manager = reader.getRasterManager(reader.getGridCoverageNames()[0]);
 
         GeneralEnvelope oe = reader.getOriginalEnvelope();
-        System.out.println(oe);
         double offset = oe.getSpan(0) * 0.9;
         GeneralEnvelope reNative = new GeneralEnvelope(oe);
         reNative.setRange(0, oe.getMinimum(0) - offset, oe.getMaximum(0) - offset);
@@ -49,7 +62,7 @@ public class RasterLayerRequestTest {
         // Creating a request
         final RasterLayerRequest request = new RasterLayerRequest(
                 new GeneralParameterValue[] { ggParam }, manager);
-        double[] rr = request.getRequestedResolution();
+        double[] rr = request.spatialRequestHelper.getComputedResolution();
         // System.out.println(Arrays.toString(rr));
         double resolution = Math.min(rr[0], rr[1]);
         // System.out.println(resolution);

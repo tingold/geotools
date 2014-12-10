@@ -88,6 +88,8 @@ public class URN_EPSG_Test extends TestCase {
      * Tests versioning.
      */
     public void testVersion() throws FactoryException {
+        CRS.reset("all");
+        
         CoordinateReferenceSystem expected = CRS.decode("EPSG:4326");
         final String version = String.valueOf(CRS.getVersion("EPSG"));
         final String urn = "urn:ogc:def:crs:EPSG:" + version + ":4326";
@@ -108,7 +110,7 @@ public class URN_EPSG_Test extends TestCase {
         assertSame(expected, test.createCoordinateReferenceSystem("urn:ogc:def:crs:EPSG:6.11:4326"));
         assertEquals("6.11", test.lastVersion.toString());
         assertEquals("Should use the fallback factory.",
-                failureCount + 1, FallbackAuthorityFactory.getFailureCount());
+                failureCount + 2, FallbackAuthorityFactory.getFailureCount());
     }
 
     /**

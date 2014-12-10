@@ -2,7 +2,7 @@
  *    GeoTools - The Open Source Java GIS Toolkit
  *    http://geotools.org
  * 
- *    (C) 2004-2008, Open Source Geospatial Foundation (OSGeo)
+ *    (C) 2004-2014, Open Source Geospatial Foundation (OSGeo)
  *    
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,10 @@
 package org.geotools.geometry.jts;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.CoordinateSequence;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
@@ -86,7 +88,7 @@ public class LiteCoordinateSequence extends PackedCoordinateSequence {
      * @param coords
      * 
      */
-    public LiteCoordinateSequence(double[] coords) {
+    public LiteCoordinateSequence(double... coords) {
       init(coords, 2);
     }
     
@@ -118,17 +120,31 @@ public class LiteCoordinateSequence extends PackedCoordinateSequence {
      * @param coordinates
      */
     public LiteCoordinateSequence(Coordinate[] coordinates) {
-      if (coordinates == null)
-        coordinates = new Coordinate[0];
-      this.dimension=2;
+        if (coordinates == null)
+            coordinates = new Coordinate[0];
+        this.dimension = guessDimension(coordinates);
 
-      coords = new double[coordinates.length * this.dimension];
-      for (int i = 0; i < coordinates.length; i++) {
-        coords[i * this.dimension] = coordinates[i].x;
-        if (this.dimension >= 2)
-          coords[i * this.dimension + 1] = coordinates[i].y;
-      }
-      this.size = coordinates.length;
+        coords = new double[coordinates.length * this.dimension];
+        for (int i = 0; i < coordinates.length; i++) {
+            coords[i * this.dimension] = coordinates[i].x;
+            if (this.dimension > 2) {
+                coords[i * this.dimension + 1] = coordinates[i].y;
+                coords[i * this.dimension + 2] = coordinates[i].z;
+            } else if (this.dimension > 1) {
+                coords[i * this.dimension + 1] = coordinates[i].y;
+            }
+        }
+        this.size = coordinates.length;
+    }
+
+    private int guessDimension(Coordinate[] coordinates) {
+        for (Coordinate c : coordinates) {
+            if(!java.lang.Double.isNaN(c.z)) {
+                return 3;
+            }
+        }
+        
+        return 2;
     }
 
     /**
@@ -157,6 +173,26 @@ public class LiteCoordinateSequence extends PackedCoordinateSequence {
         double[] orig = seq.getArray();
         this.coords = new double[orig.length];
         System.arraycopy(orig, 0, coords, 0, coords.length);
+        
+    }
+
+    public LiteCoordinateSequence(CoordinateSequence cs, int dimension) {
+        this.size = cs.size();
+        this.dimension = dimension;
+        
+        if(cs instanceof LiteCoordinateSequence) {
+            double[] orig = ((LiteCoordinateSequence) cs).getOrdinateArray(dimension);
+            this.coords = new double[orig.length];
+            System.arraycopy(orig, 0, coords, 0, coords.length);
+        } else {
+            this.coords = new double[size * dimension];
+            int minDimension = Math.min(dimension, cs.getDimension());
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < minDimension; j++) {
+                    coords[i * dimension + j] = cs.getOrdinate(i, j);
+                }
+            }
+        }
         
     }
 
@@ -270,8 +306,9 @@ public class LiteCoordinateSequence extends PackedCoordinateSequence {
 	 */
 	public double[] getXYArray()
 	{
-		if (dimension==2)  //this is always true
+		if (dimension == 2) {  
 			return coords;
+		}
 		// this should never run, but its here for the future...
 		int n = size();
 		double[] result = new double[n*2];
@@ -283,123 +320,122 @@ public class LiteCoordinateSequence extends PackedCoordinateSequence {
 		return result;
 	}
 	
+	public double[] getOrdinateArray(int dimensions) {
+        if(dimensions == this.dimension) {
+            return coords;
+        }
+        
+        int n = size();
+        double[] result = new double[n * dimensions];
+        int minDimensions = Math.min(dimensions, this.dimension);
+        for (int t = 0; t < n; t++) {
+            for (int d = 0; d < minDimensions; d++) {
+                result[t * 2 + d] = getOrdinate(t, d);
+            }
+        }
+        return result;
+    }
+	
+	/**
+	 * Clones the specified geometry using {@link LiteCoordinateSequence} in the result, with the
+	 * specified number of dimensions
+	 * 
+	 * @param geom
+	 * @param dimension
+	 * @return
+	 */
+	public static Geometry cloneGeometry(Geometry geom, int dimension) {
+	    if(dimension < 2) {
+	        throw new IllegalArgumentException("Invalid dimension value, must be >= 2");
+	    }
+	    
+	    if(geom == null)
+            return null;
+        
+        if (geom instanceof LineString) {
+            return cloneGeometry((LineString) geom, dimension);
+        } else if (geom instanceof Polygon) {
+            return cloneGeometry((Polygon) geom, dimension);
+        } else if (geom instanceof Point) {
+            return cloneGeometry((Point) geom, dimension);
+        } else {
+            return cloneGeometry((GeometryCollection) geom, dimension);
+        }
+    }
+	
 	/**
 	 * Clones the specified geometry using {@link LiteCoordinateSequence} in the result
 	 * @param geom
 	 * @return
 	 */
     public static final Geometry cloneGeometry(Geometry geom) {
-        if(geom == null)
-            return null;
-        
-        if (geom.getFactory().getCoordinateSequenceFactory() instanceof LiteCoordinateSequenceFactory) {
-            if (geom instanceof LineString)
-                return cloneGeometryLCS((LineString) geom);
-            else if (geom instanceof Polygon)
-                return cloneGeometryLCS((Polygon) geom);
-            else if (geom instanceof Point)
-                return cloneGeometryLCS((Point) geom);
-            else
-                return cloneGeometryLCS((GeometryCollection) geom);
-        } else {
-            if (geom instanceof LineString)
-                return cloneGeometry((LineString) geom);
-            else if (geom instanceof Polygon)
-                return cloneGeometry((Polygon) geom);
-            else if (geom instanceof Point)
-                return cloneGeometry((Point) geom);
-            else
-                return cloneGeometry((GeometryCollection) geom);
-        }
+        return cloneGeometry(geom, 2);
     }
-
     /**
      * changes this to a new CSF -- more efficient than the JTS way
      * 
      * @param geom
      */
-    private static final Geometry cloneGeometryLCS(Polygon geom) {
-        LinearRing lr = (LinearRing) cloneGeometryLCS((LinearRing) geom.getExteriorRing());
+    private static final Geometry cloneGeometry(Polygon geom, int dimension) {
+        LinearRing lr = (LinearRing) cloneGeometry((LinearRing) geom.getExteriorRing(), dimension);
         LinearRing[] rings = new LinearRing[geom.getNumInteriorRing()];
         for (int t = 0; t < rings.length; t++) {
-            rings[t] = (LinearRing) cloneGeometryLCS((LinearRing) geom.getInteriorRingN(t));
+            rings[t] = (LinearRing) cloneGeometry((LinearRing) geom.getInteriorRingN(t), dimension);
         }
         return geomFac.createPolygon(lr, rings);
     }
 
-    private static final Geometry cloneGeometryLCS(Point geom) {
-        return geomFac.createPoint(new LiteCoordinateSequence((LiteCoordinateSequence) geom
-                .getCoordinateSequence()));
+    private static final Geometry cloneGeometry(Point geom, int dimension) {
+        return geomFac.createPoint(new LiteCoordinateSequence(geom.getCoordinateSequence(), dimension));
     }
 
-    private static final Geometry cloneGeometryLCS(LineString geom) {
-        return geomFac.createLineString(new LiteCoordinateSequence((LiteCoordinateSequence) geom
-                .getCoordinateSequence()));
-    }
+    private static final Geometry cloneGeometry(LineString geom, int dimension) {
+        if (geom instanceof SingleCurvedGeometry<?>) {
+            SingleCurvedGeometry<?> curved = (SingleCurvedGeometry<?>) geom;
+            double[] controlPoints = curved.getControlPoints();
+            double[] clonedPoints = new double[controlPoints.length];
+            System.arraycopy(controlPoints, 0, clonedPoints, 0, controlPoints.length);
 
-    private static final Geometry cloneGeometryLCS(LinearRing geom) {
-        return geomFac.createLinearRing(new LiteCoordinateSequence((LiteCoordinateSequence) geom
-                .getCoordinateSequence()));
-    }
-
-    private static final Geometry cloneGeometryLCS(GeometryCollection geom) {
-        if (geom.getNumGeometries() == 0) {
-            Geometry[] gs = new Geometry[0];
-            return geomFac.createGeometryCollection(gs);
-        }
-
-        ArrayList gs = new ArrayList(geom.getNumGeometries());
-        int n = geom.getNumGeometries();
-        Class geomType = geom.getGeometryN(0).getClass();
-        for (int t = 0; t < n; t++) {
-            Geometry clone = cloneGeometry(geom.getGeometryN(t));
-            if(clone.getClass() != geomType) {
-                geomType = null;
+            return new CircularString(clonedPoints, geomFac, curved.getTolerance());
+        } else if (geom instanceof CompoundCurvedGeometry<?>) {
+            CompoundCurvedGeometry<?> curved = (CompoundCurvedGeometry<?>) geom;
+            List<LineString> components = curved.getComponents();
+            List<LineString> clonedComponents = new ArrayList<>(components.size());
+            for (LineString ls : components) {
+                LineString cloned = (LineString) cloneGeometry(ls, dimension);
+                clonedComponents.add(cloned);
             }
-            gs.add(t, clone);
-        }
-        
-        if(geomType == Point.class) {
-            return geomFac.createMultiPoint((Point[]) gs.toArray(new Point[gs.size()]));
-        } else if(geomType == LineString.class) {
-            return geomFac.createMultiLineString((LineString[]) gs.toArray(new LineString[gs.size()]));
-        } else if(geomType == Polygon.class) {
-            return geomFac.createMultiPolygon((Polygon[]) gs.toArray(new Polygon[gs.size()]));
+            return new CompoundCurve(clonedComponents, geomFac, dimension);
         } else {
-            return geomFac.buildGeometry(gs);
+            return geomFac.createLineString(new LiteCoordinateSequence(
+                    geom.getCoordinateSequence(), dimension));
         }
     }
 
-    /**
-     * changes this to a new CSF -- more efficient than the JTS way
-     * 
-     * @param geom
-     */
-    private static final Geometry cloneGeometry(Polygon geom) {
-        LinearRing lr = (LinearRing) cloneGeometry((LinearRing) geom.getExteriorRing());
-        LinearRing[] rings = new LinearRing[geom.getNumInteriorRing()];
-        for (int t = 0; t < rings.length; t++) {
-            rings[t] = (LinearRing) cloneGeometry((LinearRing) geom.getInteriorRingN(t));
+    private static final Geometry cloneGeometry(LinearRing geom, int dimension) {
+        if (geom instanceof SingleCurvedGeometry<?>) {
+            SingleCurvedGeometry<?> curved = (SingleCurvedGeometry<?>) geom;
+            double[] controlPoints = curved.getControlPoints();
+            double[] clonedPoints = new double[controlPoints.length];
+            System.arraycopy(controlPoints, 0, clonedPoints, 0, controlPoints.length);
+
+            return new CircularRing(clonedPoints, geomFac, curved.getTolerance());
+        } else if (geom instanceof CompoundCurvedGeometry<?>) {
+            CompoundCurvedGeometry<?> curved = (CompoundCurvedGeometry<?>) geom;
+            List<LineString> components = curved.getComponents();
+            List<LineString> clonedComponents = new ArrayList<>(components.size());
+            for (LineString ls : components) {
+                LineString cloned = (LineString) cloneGeometry(ls, dimension);
+                clonedComponents.add(cloned);
+            }
+            return new CompoundRing(clonedComponents, geomFac, dimension);
+        } else {
+            return geomFac.createLinearRing(new LiteCoordinateSequence(
+                    geom.getCoordinateSequence(), dimension));
         }
-        return geomFac.createPolygon(lr, rings);
     }
 
-    private static final Geometry cloneGeometry(Point geom) {
-        return geomFac
-                .createPoint(new LiteCoordinateSequence((Coordinate[]) geom.getCoordinates()));
-    }
-
-    private static final Geometry cloneGeometry(LineString geom) {
-        return geomFac.createLineString(new LiteCoordinateSequence((Coordinate[]) geom
-                .getCoordinates()));
-    }
-
-    private static final Geometry cloneGeometry(LinearRing geom) {
-        return geomFac.createLinearRing(new LiteCoordinateSequence((Coordinate[]) geom
-                .getCoordinates()));
-    }
-
-    private static final Geometry cloneGeometry(GeometryCollection geom) {
+    private static final Geometry cloneGeometry(GeometryCollection geom, int dimension) {
         if (geom.getNumGeometries() == 0) {
             Geometry[] gs = new Geometry[0];
             return geomFac.createGeometryCollection(gs);
@@ -408,9 +444,33 @@ public class LiteCoordinateSequence extends PackedCoordinateSequence {
         ArrayList gs = new ArrayList(geom.getNumGeometries());
         int n = geom.getNumGeometries();
         for (int t = 0; t < n; t++) {
-            gs.add(cloneGeometry(geom.getGeometryN(t)));
+            gs.add(cloneGeometry(geom.getGeometryN(t), dimension));
         }
         return geomFac.buildGeometry(gs);
     }
-	
+
+    
+    public String toString() {
+      if (size > 0) {
+        StringBuffer strBuf = new StringBuffer((9 * dimension)  * size);
+        strBuf.append('(');
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < dimension; j++) {
+                strBuf.append(coords[i * dimension + j]);
+                if(j < dimension - 1) {
+                    strBuf.append(" ");
+                }
+            }
+            if(i < size - 1) {
+                strBuf.append(", ");
+            }
+        }
+        strBuf.append(')');
+        return strBuf.toString();
+      } else {
+        return "()";
+      }
+    }
+    
+
 }

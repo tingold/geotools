@@ -16,6 +16,8 @@
  */
 package org.geotools.filter.function;
 
+import static org.geotools.filter.capability.FunctionNameImpl.*;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Comparator;
@@ -28,7 +30,9 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.visitor.CalcResult;
 import org.geotools.feature.visitor.UniqueVisitor;
+import org.geotools.filter.capability.FunctionNameImpl;
 import org.geotools.util.NullProgressListener;
+import org.opengis.filter.capability.FunctionName;
 
 
 /**
@@ -41,15 +45,21 @@ import org.geotools.util.NullProgressListener;
  */
 public class UniqueIntervalFunction extends ClassificationFunction {
     
+    public static FunctionName NAME = new FunctionNameImpl("UniqueInterval",
+            RangedClassifier.class,
+            parameter("value", Double.class),
+            parameter("classes", Integer.class));
+    
     public UniqueIntervalFunction() {
-        setName("UniqueInterval");
+        super(NAME);
     }
 
+    @SuppressWarnings("unchecked")
     private Object calculate(SimpleFeatureCollection featureCollection) {
         try {
             int classNum = getClasses();
         	//use a visitor to grab the unique values
-            UniqueVisitor uniqueVisit = new UniqueVisitor(getExpression());
+            UniqueVisitor uniqueVisit = new UniqueVisitor(getParameters().get(0));
         	if (progress == null) progress = new NullProgressListener();
                 featureCollection.accepts(uniqueVisit, progress);
         	if (progress.isCanceled()) return null;
@@ -59,7 +69,6 @@ public class UniqueIntervalFunction extends ClassificationFunction {
             List result = calcResult.toList();
             //sort the results and put them in an array
             Collections.sort(result, new Comparator() {
-        
                 public int compare(Object o1, Object o2) {
                     if (o1 == null) {
                         if (o2 == null) {
@@ -74,7 +83,6 @@ public class UniqueIntervalFunction extends ClassificationFunction {
                     }
                     return 0;
                 }
-                
             });
             Object[] results = result.toArray();
             //put the results into their respective slots/bins/buckets
@@ -130,7 +138,4 @@ public class UniqueIntervalFunction extends ClassificationFunction {
         return calculate((SimpleFeatureCollection) feature);
     }
 
-    public int getArgCount() {
-        return 2;
-    }
 }

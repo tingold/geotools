@@ -350,7 +350,7 @@ public class FilterCompliancePreProcessor implements FilterVisitor {
                 for (Filter child : filter.getChildren()) {
                     extraData = child.accept(this, extraData);
                 }
-                Data mediumFilter = createMediumLevelLogicFilter(FilterType.LOGIC_AND, startSize);
+                Data mediumFilter = createMediumLevelLogicFilter(FilterType.LOGIC_OR, startSize);
                 current.push(mediumFilter);
                 break;
 
@@ -359,7 +359,7 @@ public class FilterCompliancePreProcessor implements FilterVisitor {
                 for (Filter child : filter.getChildren()) {
                     extraData = child.accept(this, extraData);
                 }
-                Data highFilter = createHighLevelLogicFilter(FilterType.LOGIC_AND, startSize);
+                Data highFilter = createHighLevelLogicFilter(FilterType.LOGIC_OR, startSize);
                 current.push(highFilter);
 
                 break;
@@ -600,7 +600,7 @@ public class FilterCompliancePreProcessor implements FilterVisitor {
 
             for (Object item : ((Or)f).getChildren()) {
                 org.opengis.filter.Filter filter = (org.opengis.filter.Filter) item;
-                if (filter == org.geotools.filter.Filter.ALL) {
+                if (filter == org.opengis.filter.Filter.EXCLUDE) {
                     continue;
                 }
                 added++;

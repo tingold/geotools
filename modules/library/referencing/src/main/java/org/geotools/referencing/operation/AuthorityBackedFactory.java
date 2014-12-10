@@ -35,6 +35,7 @@ import org.geotools.factory.Hints;
 import org.geotools.factory.OptionalFactory;
 import org.geotools.factory.FactoryRegistryException;
 import org.geotools.referencing.AbstractIdentifiedObject;
+import org.geotools.referencing.CRS;
 import org.geotools.referencing.ReferencingFactoryFinder;
 import org.geotools.referencing.factory.BackingStoreException;
 import org.geotools.resources.i18n.Loggings;
@@ -261,7 +262,7 @@ public class AuthorityBackedFactory extends DefaultCoordinateOperationFactory
              * Other kind of error. It may be more serious, but the super-class is capable
              * to provides a raisonable default behavior. Log as a warning and lets continue.
              */
-            log(exception, authorityFactory);
+            log(exception, authorityFactory,Level.FINER);
             return null;
         }
         if (operations != null) {
@@ -369,7 +370,12 @@ public class AuthorityBackedFactory extends DefaultCoordinateOperationFactory
             throws FactoryException
     {
         if ((prepend == null || prepend.isIdentity()) && (append == null || append.isIdentity())) {
-            return operation;
+            if(!CRS.equalsIgnoreMetadata(sourceCRS, operation.getSourceCRS()) ||
+               !CRS.equalsIgnoreMetadata(targetCRS, operation.getTargetCRS())) {
+                return new ForcedCRSOperation(operation, sourceCRS, targetCRS);
+            } else {
+                return operation;
+            }
         }
         final Map<String,?> properties = AbstractIdentifiedObject.getProperties(operation);
         /*
@@ -427,7 +433,13 @@ public class AuthorityBackedFactory extends DefaultCoordinateOperationFactory
      * Logs a warning when an object can't be created from the specified factory.
      */
     private static void log(final Exception exception, final AuthorityFactory factory) {
-        final LogRecord record = Loggings.format(Level.WARNING,
+       log( exception, factory, Level.WARNING);
+    }
+    /**
+     * Logs a warning when an object can't be created from the specified factory.
+     */
+    private static void log(final Exception exception, final AuthorityFactory factory, Level level) {
+        final LogRecord record = Loggings.format( level,
                                  LoggingKeys.CANT_CREATE_COORDINATE_OPERATION_$1,
                                  factory.getAuthority().getTitle());
         record.setSourceClassName(AuthorityBackedFactory.class.getName());

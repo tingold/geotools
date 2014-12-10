@@ -21,7 +21,7 @@ import java.util.Collections;
 
 import org.geotools.util.Converters;
 import org.opengis.filter.FilterVisitor;
-import org.opengis.filter.MultiValuedFilter.MatchAction;
+import org.opengis.filter.PropertyIsBetween;
 import org.opengis.filter.expression.Expression;
 
 /**
@@ -33,24 +33,22 @@ import org.opengis.filter.expression.Expression;
  *
  * @source $URL$
  */
-public class IsBetweenImpl extends CompareFilterImpl implements BetweenFilter {
+public class IsBetweenImpl extends CompareFilterImpl implements PropertyIsBetween {
 
 	private Expression expression;
 	
 	protected MatchAction matchAction;
 
-	protected IsBetweenImpl(org.opengis.filter.FilterFactory factory, Expression lower, Expression expression, Expression upper, MatchAction matchAction ){
-		super( factory, lower, upper );
-		this.expression = expression;
-		this.matchAction = matchAction;
-		
-		//backwards compatability
-		filterType = FilterType.BETWEEN;
-	}
-	
-	protected IsBetweenImpl(org.opengis.filter.FilterFactory factory, Expression lower, Expression expression, Expression upper ){
-            this( factory, lower, expression, upper, MatchAction.ANY );
-        }
+    protected IsBetweenImpl(Expression lower, Expression expression, Expression upper,
+            MatchAction matchAction) {
+        super(lower, upper);
+        this.expression = expression;
+        this.matchAction = matchAction;
+    }
+
+    protected IsBetweenImpl(Expression lower, Expression expression, Expression upper) {
+        this(lower, expression, upper, MatchAction.ANY);
+    }
 	
 	public Expression getExpression() {
 		return expression;
@@ -65,10 +63,14 @@ public class IsBetweenImpl extends CompareFilterImpl implements BetweenFilter {
 	
 	//@Override
         public boolean evaluate(Object feature) {
-	    //NC - support for multiple values
+            //NC - support for multiple values
             final Object object0 = eval(expression, feature);
             final Object object1 = eval(expression1, feature);
             final Object object2 = eval(expression2, feature);
+            
+            if(object0 == null) {
+                return false;
+            }
             
             if (!(object0 instanceof Collection) && !(object1 instanceof Collection) && !(object2 instanceof Collection)) {
                 return evaluateInternal(object0, object1, object2);
@@ -111,6 +113,10 @@ public class IsBetweenImpl extends CompareFilterImpl implements BetweenFilter {
 	public boolean evaluateInternal(Object value, Object lower, Object upper) {
 		//first try to evaluate the bounds in terms of the middle
 		Object o = value;
+		if(o == null) {
+		    return false;
+		}
+		
 		Object l = Converters.convert(lower, o.getClass());
 		Object u = Converters.convert(upper, o.getClass());
 		if ( l == null || u == null ) {
@@ -157,23 +163,38 @@ public class IsBetweenImpl extends CompareFilterImpl implements BetweenFilter {
 	public void setUpperBoundary(Expression upperBoundary) {
 		setExpression2( upperBoundary );
 	}
-	
-	/**
-	 * @deprecated use {@link #getExpression()}
-	 */
-	public final org.geotools.filter.Expression getMiddleValue() {
-		return (org.geotools.filter.Expression) getExpression();
-	}
-	
-	/**
-	 * @deprecated use {@link #setExpression(Expression) }
-	 */
-	public void addMiddleValue(org.geotools.filter.Expression middleValue) {
-		setExpression( middleValue );
-	}
+
     
     public String toString() {
         return "[ " + expression + " BETWEEN " + expression1 + " AND " + expression2 + " ]";
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + ((expression == null) ? 0 : expression.hashCode());
+        result = prime * result + ((matchAction == null) ? 0 : matchAction.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (!super.equals(obj))
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        IsBetweenImpl other = (IsBetweenImpl) obj;
+        if (expression == null) {
+            if (other.expression != null)
+                return false;
+        } else if (!expression.equals(other.expression))
+            return false;
+        if (matchAction != other.matchAction)
+            return false;
+        return true;
     }
 	
 }

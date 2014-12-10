@@ -25,9 +25,14 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.measure.unit.SI;
+import javax.measure.unit.Unit;
 import javax.swing.Icon;
 
 import org.geotools.coverage.grid.GridEnvelope2D;
+import org.geotools.data.crs.ForceCoordinateSystemFeatureResults;
+import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.feature.FeatureCollection;
 import org.geotools.geometry.Envelope2D;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.JTS;
@@ -58,6 +63,9 @@ import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.LineString;
+import com.vividsolutions.jts.geom.LinearRing;
 import com.vividsolutions.jts.geom.MultiPoint;
 import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.Polygon;
@@ -76,6 +84,14 @@ import com.vividsolutions.jts.geom.Polygon;
 public final class RendererUtilities {
 
 	private final static Logger LOGGER = org.geotools.util.logging.Logging.getLogger(RendererUtilities.class.getName());
+
+    /**
+     * Enable unit correction in {@link #toMeters(double, CoordinateReferenceSystem)} calculation.
+     * 
+     * Toggle for a bug fix that will invalidate a good number of SLDs out there (and thus, we allow people to
+     * turn off the fix).
+     */
+    static boolean SCALE_UNIT_COMPENSATION = Boolean.parseBoolean(System.getProperty("org.geotoools.render.lite.scale.unitCompensation", "true"));
 
     /**
      * Helber class for building affine transforms. We use one instance per thread,
@@ -421,19 +437,64 @@ public final class RendererUtilities {
     
     /**
      * This method performs the computation using the methods suggested by the OGC SLD specification, page 26.
+     * 
+     * In GeoTools 12 this method started to take into account units of measure, if this is not desirable
+     * in your application you can set the system variable "org.geotoools.render.lite.scale.unitCompensation" 
+     * to false.
+     * 
      * @param envelope
      * @param imageWidth
      * @return
      */
     public static double calculateOGCScale(ReferencedEnvelope envelope, int imageWidth, Map hints) {
         // if it's geodetic, we're dealing with lat/lon unit measures
-        if(envelope.getCoordinateReferenceSystem() instanceof GeographicCRS) {
-            return (envelope.getWidth() * OGC_DEGREE_TO_METERS) / (imageWidth / getDpi(hints) * 0.0254);
-        } else {
-            return envelope.getWidth() / (imageWidth / getDpi(hints) * 0.0254);
-        }
+        CoordinateReferenceSystem crs = envelope.getCoordinateReferenceSystem();
+        double width = envelope.getWidth();
+        double widthMeters = toMeters(width,crs);
+        
+        return widthMeters / (imageWidth / getDpi(hints) * 0.0254);
     }
-    
+
+    /**
+     * Method used by the OGC scale calculation to turn a given length in the specified CRS towards meters.
+     * <p>
+     * GeographicCRS uses {@link #OGC_DEGREE_TO_METERS} for conversion of lat/lon measures</li>
+     * <p>
+     * Otherwise the horizontal component of the CRS is assumed to have a uniform axis unit of measure
+     * providing the Unit used for conversion. To ignore unit disable {@link #SCALE_UNIT_COMPENSATION} to
+     * for the unaltered size.
+     *  
+     * @param size
+     * @param crs
+     * @return size adjusted for GeographicCRS or CRS units
+     */
+    private static double toMeters(double size, CoordinateReferenceSystem crs) {
+        if(crs == null) {
+            LOGGER.finer("toMeters: assuming the original size is in meters already, as crs is null");
+            return size;
+        }
+        if(crs instanceof GeographicCRS) {
+            return size * OGC_DEGREE_TO_METERS;
+        }
+        if(!SCALE_UNIT_COMPENSATION) {
+            return size;
+        }
+        CoordinateReferenceSystem horizontal = CRS.getHorizontalCRS(crs);
+        if(horizontal != null) {
+            crs = horizontal;
+        }
+        Unit<?> unit = crs.getCoordinateSystem().getAxis(0).getUnit();
+        if(unit == null) {
+            LOGGER.finer("toMeters: assuming the original size is in meters already, as the first crs axis unit is null. CRS is " + crs);
+            return size;
+        }
+        if(!unit.isCompatible(SI.METER)) {
+            LOGGER.warning("toMeters: could not convert unit " + unit + " to meters");
+            return size;
+        }
+        return unit.getConverterTo(SI.METER).convert(size);
+    }
+
     /**
      * This method performs the computation using the methods suggested by the OGC SLD specification, page 26.
      * @param CRS the coordinate reference system. Used to check if we are operating in degrees or
@@ -531,106 +592,26 @@ public final class RendererUtilities {
 			throws TransformException, FactoryException {
 
 		final double diagonalGroundDistance;
-		if (!(envelope.getCoordinateReferenceSystem() instanceof EngineeringCRS)) { // geographic or cad?
-			// //
-			//
-			// get CRS2D for this referenced envelope, check that its 2d
-			//
-			// //
-			final CoordinateReferenceSystem tempCRS = CRS.getHorizontalCRS(envelope.getCoordinateReferenceSystem());
-	        if(tempCRS==null)
-	            throw new TransformException(Errors.format(
-	                      ErrorKeys.CANT_REDUCE_TO_TWO_DIMENSIONS_$1,
-	                      envelope.getCoordinateReferenceSystem()));
-			// make sure the crs is 2d
-			envelope = new ReferencedEnvelope((Envelope) envelope, tempCRS);
-			final MathTransform toWGS84 = CRS.findMathTransform(tempCRS, DefaultGeographicCRS.WGS84, true);
-
-			// //
-			// Try to compute the source crs envelope, either by asking CRS or
-			// by trying to project the WGS84 envelope (world) to the specified
-			// CRS
-			// //
-			GeneralEnvelope sourceCRSEnvelope = (GeneralEnvelope) CRS
-					.getEnvelope(tempCRS);
-			if (sourceCRSEnvelope == null) {
-				try {
-					// try to compute the envelope by reprojecting the WGS84
-					// envelope
-					sourceCRSEnvelope = CRS.transform(toWGS84
-							.inverse(), CRS.getEnvelope(DefaultGeographicCRS.WGS84));
-				} catch (TransformException e) {
-					// for some transformations this is normal, it's not possible
-					// to project the whole WGS84 envelope in many transforms,
-					// such as Mercator or Gauss (the transform does diverge)
-				}catch ( AssertionError ae){
-                                    // same reason as above basically.  For some 
-                                    // projections the assertion will complain.  Nothing can be done about this
-                                }
-			}
-
-			// //
-			//
-			// Make sure it intersect the world in the source projection by
-			// intersecting the provided envelope with the envelope of its crs.
-			//
-			// This will also prevent us from having problems with requests for
-			// images bigger than the world (thanks Dave!!!)
-			//
-			// It is important to note that I also have to update the image
-			// width in case the provided envelope is bigger than the envelope of the
-			// source crs.
-			// //
-			final GeneralEnvelope intersectedEnvelope = new GeneralEnvelope(
-					envelope);
-			if (sourceCRSEnvelope != null) {
-				intersectedEnvelope.intersect(sourceCRSEnvelope);
-				if (intersectedEnvelope.isEmpty())
-					throw new IllegalArgumentException(
-							"The provided envelope is outside the source CRS definition area");
-				if (!intersectedEnvelope.equals(envelope)) {
-					final double scale0 = intersectedEnvelope.getSpan(0)
-							/ envelope.getSpan(0);
-					final double scale1 = intersectedEnvelope.getSpan(1)
-							/ envelope.getSpan(1);
-					imageWidth *= scale0;
-					imageHeight *= scale1;
-				}
-			}
-
-			// //
-			//
-			// Go to WGS84 in order to see how things are there
-			//
-			// //
-			final GeneralEnvelope geographicEnvelope = CRS.transform(
-					toWGS84, intersectedEnvelope);
-			geographicEnvelope.setCoordinateReferenceSystem(DefaultGeographicCRS.WGS84);
-
-			// //
-			//
-			// Instantiate a geodetic calculator for GCS WGS84 and get the
-			// orthodromic distance between LLC and UC of the geographic
-			// envelope.
-			//
-			// //
-			final GeodeticCalculator calculator = new GeodeticCalculator(
-					DefaultGeographicCRS.WGS84);
-			final DirectPosition lowerLeftCorner = geographicEnvelope
-					.getLowerCorner();
-			final DirectPosition upperRightCorner = geographicEnvelope
-					.getUpperCorner();
-			calculator.setStartingGeographicPoint(lowerLeftCorner
-					.getOrdinate(0), lowerLeftCorner.getOrdinate(1));
-			calculator.setDestinationGeographicPoint(upperRightCorner
-					.getOrdinate(0), upperRightCorner.getOrdinate(1));
-			diagonalGroundDistance = calculator
-					.getOrthodromicDistance();
-		} else {
-			// if it's an engineering crs, compute only the graphical scale, assuming a CAD space
-			diagonalGroundDistance = Math.sqrt(envelope.getWidth() * envelope.getWidth()
-					+ envelope.getHeight() * envelope.getHeight());
-		}
+        if (!(envelope.getCoordinateReferenceSystem() instanceof EngineeringCRS)) { 
+            // //
+            //
+            // get CRS2D for this referenced envelope, check that its 2d
+            //
+            // //
+            final CoordinateReferenceSystem tempCRS = CRS.getHorizontalCRS(envelope
+                    .getCoordinateReferenceSystem());
+            if (tempCRS == null) {
+                throw new TransformException(Errors.format(
+                        ErrorKeys.CANT_REDUCE_TO_TWO_DIMENSIONS_$1,
+                        envelope.getCoordinateReferenceSystem()));
+            }
+            ReferencedEnvelope envelopeWGS84 = envelope.transform(DefaultGeographicCRS.WGS84, true);
+            diagonalGroundDistance = geodeticDiagonalDistance(envelopeWGS84);
+        } else {
+            // if it's an engineering crs, compute only the graphical scale, assuming a CAD space
+            diagonalGroundDistance = Math.sqrt(envelope.getWidth() * envelope.getWidth()
+                    + envelope.getHeight() * envelope.getHeight());
+        }
 
 		// //
 		//
@@ -645,6 +626,83 @@ public final class RendererUtilities {
 		return diagonalGroundDistance / diagonalPixelDistanceMeters;
 		// remember, this is the denominator, not the actual scale;
 	}
+
+    private static double geodeticDiagonalDistance(Envelope env) {
+        if(env.getWidth() < 180 && env.getHeight() < 180) {
+            return getGeodeticSegmentLength(env.getMinX(), env.getMinY(), env.getMaxX(), env.getMaxY());
+        } else {
+            // we cannot compute geodetic distance for distances longer than a hemisphere,
+            // we have to build a set of lines connecting the two points that are smaller to
+            // get a value that makes any sense rendering wise by crossing the original line with
+            // a set of quadrants that are 180x180
+            double distance = 0;
+            GeometryFactory gf = new GeometryFactory();
+            LineString ls = gf.createLineString(new Coordinate[] {new Coordinate(env.getMinX(), env.getMinY()), 
+                    new Coordinate(env.getMaxX(), env.getMaxY())});
+            int qMinX = (int) (Math.signum(env.getMinX()) * Math.ceil(Math.abs(env.getMinX() / 180.0)));
+            int qMaxX = (int) (Math.signum(env.getMaxX()) * Math.ceil(Math.abs(env.getMaxX() / 180.0)));
+            int qMinY = (int) (Math.signum(env.getMinY()) * Math.ceil(Math.abs((env.getMinY() + 90) / 180.0)));
+            int qMaxY = (int) (Math.signum(env.getMaxY()) * Math.ceil(Math.abs((env.getMaxY() + 90) / 180.0)));
+            for (int i = qMinX; i < qMaxX; i++) {
+                for (int j = qMinY; j < qMaxY; j++) {
+                    double minX = i * 180.0;
+                    double minY = j * 180.0 - 90;
+                    double maxX = minX + 180;
+                    double maxY = minY + 180;
+                    LinearRing ring = gf.createLinearRing(new Coordinate[] {new Coordinate(minX, minY), 
+                            new Coordinate(minX, maxY), new Coordinate(maxX, maxY), new Coordinate(maxX, minY),
+                            new Coordinate(minX, minY)});
+                    Polygon p = gf.createPolygon(ring, null);
+                    Geometry intersection = p.intersection(ls);
+                    if (!intersection.isEmpty()) {
+                        if (intersection instanceof LineString) {
+                            LineString ils = ((LineString) intersection);
+                            double d = getGeodeticSegmentLength(ils);
+                            distance += d;
+                        } else if (intersection instanceof GeometryCollection) {
+                            GeometryCollection igc = ((GeometryCollection) intersection);
+                            for (int k = 0; k < igc.getNumGeometries(); k++) {
+                                Geometry child = igc.getGeometryN(k);
+                                if (child instanceof LineString) {
+                                    double d = getGeodeticSegmentLength((LineString) child);
+                                    distance += d;
+                                }
+                            }
+                        }
+                    }
+                }   
+            }
+            
+            return distance;
+        }
+    }
+
+    private static double getGeodeticSegmentLength(LineString ls) {
+        Coordinate start = ls.getCoordinateN(0);
+        Coordinate end = ls.getCoordinateN(1);
+        return getGeodeticSegmentLength(start.x, start.y, end.x, end.y);
+    }
+
+    private static double getGeodeticSegmentLength(double minx, double miny, double maxx, double maxy) {
+        final GeodeticCalculator calculator = new GeodeticCalculator(DefaultGeographicCRS.WGS84);
+        double rminx = rollLongitude(minx);
+        double rminy = rollLatitude(miny);
+        double rmaxx = rollLongitude(maxx);
+        double rmaxy = rollLatitude(maxy);
+        calculator.setStartingGeographicPoint(rminx, rminy);
+        calculator.setDestinationGeographicPoint(rmaxx, rmaxy);
+        return calculator.getOrthodromicDistance();
+    }
+    
+    protected static double rollLongitude(final double x) {
+        double rolled = x - (((int) (x + Math.signum(x) * 180)) / 360) * 360.0;
+        return rolled;
+    }
+    
+    protected static double rollLatitude(final double x) {
+        double rolled = x - (((int) (x + Math.signum(x) * 90)) / 180) * 180.0;
+        return rolled;
+    }
 
 	
 	/**
@@ -709,7 +767,7 @@ public final class RendererUtilities {
      * @param g
      */
     public static Geometry getCentroid(Geometry g) {
-        if(g instanceof MultiPoint) {
+        if(g instanceof Point || g instanceof MultiPoint) {
             return g;
         } else if (g instanceof GeometryCollection) {
             final GeometryCollection gc = (GeometryCollection) g;
@@ -775,5 +833,38 @@ public final class RendererUtilities {
             d2 = 0;
         }
         return Math.max(d1, d2);
+    }
+    
+    /**
+     * Makes sure the feature collection generates the desired sourceCrs, this is mostly a workaround
+     * against feature sources generating feature collections without a CRS (which is fatal to
+     * the reprojection handling later in the code)
+     *  
+     * @param features
+     * @param sourceCrs
+     * @return FeatureCollection<SimpleFeatureType, SimpleFeature> that produces results with the correct CRS
+     */
+    static FeatureCollection fixFeatureCollectionReferencing(FeatureCollection features, CoordinateReferenceSystem sourceCrs) {
+        // this is the reader's CRS
+        CoordinateReferenceSystem rCS = null;
+        try {
+            rCS = features.getSchema().getGeometryDescriptor().getType().getCoordinateReferenceSystem();
+        } catch(NullPointerException e) {
+            // life sucks sometimes
+        }
+
+        if (rCS != sourceCrs && sourceCrs != null) {
+            // if the datastore is producing null CRS, we recode.
+            // if the datastore's CRS != real CRS, then we recode
+            if ((rCS == null) || !CRS.equalsIgnoreMetadata(rCS, sourceCrs)) {
+                // need to retag the features
+                try {
+                    return new ForceCoordinateSystemFeatureResults( (SimpleFeatureCollection) features, sourceCrs);
+                } catch (Exception ee) {
+                    LOGGER.log(Level.WARNING, ee.getLocalizedMessage(), ee);
+                }
+            }
+        }
+        return features;
     }
 }

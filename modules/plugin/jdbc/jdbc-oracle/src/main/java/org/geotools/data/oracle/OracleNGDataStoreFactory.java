@@ -17,9 +17,13 @@
 package org.geotools.data.oracle;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Map;
 
-import org.geotools.data.DataAccessFactory.Param;
+import oracle.jdbc.OracleConnection;
+
+import org.geotools.data.Transaction;
 import org.geotools.jdbc.JDBCDataStore;
 import org.geotools.jdbc.JDBCDataStoreFactory;
 import org.geotools.jdbc.SQLDialect;
@@ -54,6 +58,10 @@ public class OracleNGDataStoreFactory extends JDBCDataStoreFactory {
     
     /** parameter for namespace of the datastore */
     public static final Param LOOSEBBOX = new Param("Loose bbox", Boolean.class, "Perform only primary filter on bbox", false, Boolean.TRUE);
+    
+    /** Metadata table providing information about primary keys **/
+    public static final Param GEOMETRY_METADATA_TABLE = new Param("Geometry metadata table", String.class,
+            "The optional table containing geometry metadata (geometry type and srid). Can be expressed as 'schema.name' or just 'name'", false);
     
     @Override
     protected SQLDialect createSQLDialect(JDBCDataStore dataStore) {
@@ -104,8 +112,9 @@ public class OracleNGDataStoreFactory extends JDBCDataStoreFactory {
         throws IOException {
         
         // make the schema uppercase if it's not already
-        if(dataStore.getDatabaseSchema() != null)
+        if(dataStore.getDatabaseSchema() != null) {
             dataStore.setDatabaseSchema(dataStore.getDatabaseSchema().toUpperCase());
+        }
         
         // setup loose bbox
         OracleDialect dialect = (OracleDialect) dataStore.getSQLDialect();
@@ -116,9 +125,26 @@ public class OracleNGDataStoreFactory extends JDBCDataStoreFactory {
         Boolean estimated = (Boolean) ESTIMATED_EXTENTS.lookUp(params);
         dialect.setEstimatedExtentsEnabled(estimated == null || Boolean.TRUE.equals(estimated));
         
-        // setup proper fetch size
-        dataStore.setFetchSize(200);
+        // check the geometry metadata table
+        String metadataTable = (String) GEOMETRY_METADATA_TABLE.lookUp(params);
+        dialect.setGeometryMetadataTable(metadataTable);
         
+        if (dataStore.getFetchSize() <= 0) {
+            // Oracle is dead slow with the fetch size at 0, let's have a sane default
+            dataStore.setFetchSize(200);
+        }
+        
+        Connection cx = dataStore.getConnection(Transaction.AUTO_COMMIT);
+        try {
+            OracleConnection oracleConnection = dialect.unwrapConnection( cx );
+        } catch (SQLException e) {
+            throw new IOException(
+                    "Unable to obtain Oracle Connection require for SDO Geometry access)."+
+                    "Check connection pool implementation to unsure unwrap is available", e);
+        }
+        finally {
+            dataStore.closeSafe(cx);
+        }        
         return dataStore;
     }
     
@@ -128,7 +154,11 @@ public class OracleNGDataStoreFactory extends JDBCDataStoreFactory {
       String host = (String) HOST.lookUp(params);        
       Integer port =(Integer) PORT.lookUp(params);
 
-    	if(db.startsWith("("))
+    	if(db.startsWith("(") || db.startsWith("ldap://"))
+    		// for Oracle LDAP:
+    		// ldap://[host]/[db],cn=OracleContext,dc=[oracle_ldap_context]
+    		// for Oracle RAC
+    		// (DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=[host])(PORT=[port, often 1521]))(LOAD_BALANCE=YES)(CONNECT_DATA=(SERVICE_NAME=[oracle_service_name])))
     		return JDBC_PATH + db;  
     	else if(db.startsWith("/") && host != null && port != null)
     		return JDBC_PATH + "//" + host + ":" + port + db;
@@ -151,10 +181,11 @@ public class OracleNGDataStoreFactory extends JDBCDataStoreFactory {
         parameters.put(HOST.key, HOST);
         parameters.put(DATABASE.key, DATABASE);
         parameters.put(DBTYPE.key, DBTYPE);
+        parameters.put(GEOMETRY_METADATA_TABLE.key, GEOMETRY_METADATA_TABLE);
     }
     
     @Override
     protected String getValidationQuery() {
-        return "select sysdate from dual";
+        return "select 1 from dual";
     }
 }

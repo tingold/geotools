@@ -18,6 +18,7 @@ package org.geotools.data.sqlserver;
 
 import java.util.Properties;
 
+import org.apache.commons.dbcp.BasicDataSource;
 import org.geotools.jdbc.JDBCDataStore;
 import org.geotools.jdbc.JDBCDataStoreFactory;
 import org.geotools.jdbc.JDBCTestSetup;
@@ -57,6 +58,7 @@ public class SQLServerTestSetup extends JDBCTestSetup {
         //drop old data
         runSafe("DROP TABLE ft1");
         
+        runSafe("DROP TABLE ft_from");
 
         try {
             run("DROP TABLE ft2; COMMIT;");
@@ -65,7 +67,7 @@ public class SQLServerTestSetup extends JDBCTestSetup {
 
         //create the data
 
-        String sql = "CREATE TABLE ft1 (id int IDENTITY(1,1) PRIMARY KEY, "
+        String sql = "CREATE TABLE ft1 (id int IDENTITY(0,1) PRIMARY KEY, "
             + "geometry geometry, intProperty int, "
             + "doubleProperty float, stringProperty varchar(255))";
         run(sql);
@@ -85,6 +87,26 @@ public class SQLServerTestSetup extends JDBCTestSetup {
         sql = "INSERT INTO ft1 (geometry,intProperty,doubleProperty,stringProperty) VALUES ("
             + "geometry::STGeomFromText('POINT(2 2)',4326), 2, 2.2,'two');";
         run(sql);
+        
+        // create the spatial index
+        run("CREATE SPATIAL INDEX _ft1_geometry_index on ft1(geometry) WITH (BOUNDING_BOX = (-10, -10, 10, 10))");
+        
+        // add the ft_from table contents
+        sql = "CREATE TABLE ft_from (id int IDENTITY(0,1) PRIMARY KEY, "
+                + "geometry geometry, \"ORIGIN_FROM\" varchar(255))";
+        run(sql);
+        sql = "INSERT INTO ft_from (geometry,\"ORIGIN_FROM\") VALUES ("
+                + "geometry::STGeomFromText('POINT(0 90)',4326), 'NorthPole');";
+        run(sql);
+        sql = "INSERT INTO ft_from (geometry,\"ORIGIN_FROM\") VALUES ("
+                + "geometry::STGeomFromText('POINT(0 -90)',4326), 'SouthPole');";
+        run(sql);
     }
+    
+    @Override
+    protected void initializeDataSource(BasicDataSource ds, Properties db) {
+        super.initializeDataSource(ds, db);
+        ds.setValidationQuery("select 1");
+    }   
 
 }

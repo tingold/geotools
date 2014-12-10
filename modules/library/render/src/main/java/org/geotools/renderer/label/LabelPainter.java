@@ -45,7 +45,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.media.jai.Interpolation;
 import javax.swing.Icon;
 
 import org.geotools.geometry.jts.LiteShape2;
@@ -75,6 +74,8 @@ import com.vividsolutions.jts.geom.GeometryFactory;
  */
 public class LabelPainter {
     
+    private static final String NOT_EMPTY_STRING = " ";
+
     /**
      * Epsilon used for comparisons with 0
      */
@@ -164,6 +165,7 @@ public class LabelPainter {
         if(labelItem.getAutoWrap() <= 0) {
             // no need for auto-wrapping, we already have the proper split
             for (String line : splitted) {
+                line = checkForEmptyLine(line);
                 FontRenderContext frc = graphics.getFontRenderContext();
                 TextLayout layout = new TextLayout(line, labelItem.getTextStyle().getFont(), frc);
                 LineInfo info = new LineInfo(line, layoutSentence(line, labelItem), layout);
@@ -180,15 +182,15 @@ public class LabelPainter {
 
             // accumulate the lines
             for (int i = 0; i < splitted.length; i++) {
-                String line = splitted[i];
+                String line = checkForEmptyLine(splitted[i]);
 
                 // build the line break iterator that will split lines at word
                 // boundaries when the wrapping length is exceeded
                 AttributedString attributed = new AttributedString(line, map);
                 AttributedCharacterIterator iter = attributed.getIterator();
-                LineBreakMeasurer lineMeasurer = new LineBreakMeasurer(iter, BreakIterator
-                        .getWordInstance(), graphics.getFontRenderContext());
-                BreakIterator breaks = BreakIterator.getWordInstance();
+                LineBreakMeasurer lineMeasurer = new LineBreakMeasurer(iter,
+                        BreakIterator.getLineInstance(), graphics.getFontRenderContext());
+                BreakIterator breaks = BreakIterator.getLineInstance();
                 breaks.setText(line);
 
                 // setup iteration and start splitting at word boundaries
@@ -218,11 +220,9 @@ public class LabelPainter {
                     // centering)
 
                     String extracted = line.substring(prevPosition, newPosition).trim();
-                    if(!"".equals(extracted)) {
-	                    LineInfo info = new LineInfo(extracted, layoutSentence(extracted, labelItem),
-	                            layout);
-	                    lines.add(info);
-                    }
+                    LineInfo info = new LineInfo(extracted, layoutSentence(
+                            extracted, labelItem), layout);
+                    lines.add(info);
                     prevPosition = newPosition;
                 }
             }
@@ -266,6 +266,20 @@ public class LabelPainter {
             info.y = labelY;
         }
         normalizeBounds(labelBounds);
+    }
+
+    /**
+     * Fix for GEOT-4789: a label line cannot be empty,
+     * to avoid exceptions in layout and measuring.
+     * 
+     * @param line
+     * @return
+     */
+    private String checkForEmptyLine(String line) {
+        if(line == null || line.equals("")) {
+            return NOT_EMPTY_STRING;
+        }
+        return line;
     }
 
     /**
@@ -465,7 +479,12 @@ public class LabelPainter {
                         .getWidth() / 2.0 + offsetX, -1.0 * labelBounds.getHeight() / 2.0 + offsetY)), null, null,
                         false, false);
 
+                // resize graphic and transform it based on the position of the last line
                 graphic = resizeGraphic(graphic);
+                AffineTransform graphicTx = new AffineTransform(transform);
+                LineInfo lastLine = lines.get(lines.size() - 1);
+                graphicTx.translate(lastLine.x, lastLine.y);
+                graphics.setTransform(graphicTx);
                 shapePainter.paint(graphics, tempShape, graphic, graphic.getMaxScale());
             }
             
@@ -531,16 +550,16 @@ public class LabelPainter {
             MarkStyle2D resized = (MarkStyle2D) mark.clone();
             if(mode == GraphicResize.PROPORTIONAL) {
                 if(width > height) {
-                    resized.setSize((int) Math.round(bounds.getHeight() * width / bounds.getWidth()));
+                    resized.setSize(Math.round(bounds.getHeight() * width / bounds.getWidth()));
                 } else {
-                    resized.setSize((int) height);
+                    resized.setSize(height);
                 }
             } else {
                 TransformedShape tss = new TransformedShape();
                 tss.shape = original;
                 tss.setTransform(AffineTransform.getScaleInstance(width / bounds.getWidth(), height / bounds.getHeight()));
                 resized.setShape(tss);
-                resized.setSize((int) height);
+                resized.setSize(height);
             }
             
             return resized;
@@ -741,11 +760,12 @@ public class LabelPainter {
                 graphics.getFontRenderContext());
         
         // gracefully handle font size = 0
-        if(lm.getHeight() > 0)
+        if (lm.getHeight() > 0) {
             return (Math.abs(lm.getStrikethroughOffset()) + lm.getDescent() + lm.getLeading())
                     / lm.getHeight();
-        else 
+        } else {
             return 0;
+        }
     }
 
     /**

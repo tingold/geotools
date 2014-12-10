@@ -45,6 +45,7 @@ import com.vividsolutions.jts.geom.Geometry;
  * A dom based parser to build filters as per OGC 01-067
  *
  * @author Ian Turton, CCG
+ * @author Niels Charlier
  *
  *
  * @source $URL$
@@ -87,13 +88,13 @@ public final class FilterDOMParser {
         comparisions.put("PropertyIsLike", new Integer(AbstractFilter.LIKE));
         comparisions.put("PropertyIsNull", new Integer(AbstractFilter.NULL));
         comparisions.put("PropertyIsBetween",
-            new Integer(Filter.BETWEEN));
+            new Integer(FilterType.BETWEEN));
         comparisions.put("FeatureId", new Integer(AbstractFilter.FID));
 
         spatial.put("Equals", new Integer(AbstractFilter.GEOMETRY_EQUALS));
         spatial.put("Disjoint", new Integer(AbstractFilter.GEOMETRY_DISJOINT));
         spatial.put("Intersects",
-            new Integer(Filter.GEOMETRY_INTERSECTS));
+            new Integer(FilterType.GEOMETRY_INTERSECTS));
         spatial.put("Touches", new Integer(AbstractFilter.GEOMETRY_TOUCHES));
         spatial.put("Crosses", new Integer(AbstractFilter.GEOMETRY_CROSSES));
         spatial.put("Within", new Integer(AbstractFilter.GEOMETRY_WITHIN));
@@ -116,31 +117,6 @@ public final class FilterDOMParser {
     private FilterDOMParser() {
     }
     
-    private static NamespaceSupport getNameSpaces(Node node)
-    {
-        NamespaceSupport namespaces = new NamespaceSupport();
-        while (node != null)
-        {
-            NamedNodeMap atts = node.getAttributes();
-            
-            if (atts != null) {
-                for (int i=0; i<atts.getLength(); i++){
-                    Node att = atts.item(i);
-                    
-                    if (att.getNamespaceURI() != null
-                            && att.getNamespaceURI().equals("http://www.w3.org/2000/xmlns/")
-                            && namespaces.getURI(att.getLocalName()) == null){
-                        namespaces.declarePrefix(att.getLocalName(), att.getNodeValue());
-                    }
-                }
-            }
-            
-            node = node.getParentNode();
-        }
-        
-        return namespaces;
-    }
-
     /**
      * Parses the filter using DOM.
      *
@@ -151,11 +127,8 @@ public final class FilterDOMParser {
      * @task TODO: split up this insanely long method.
      */
     public static org.opengis.filter.Filter parseFilter(Node root) {
-        //NC - NameSpaceSupport
-        NamespaceSupport namespaces = getNameSpaces(root);
         
         final ExpressionDOMParser expressionDOMParser = new ExpressionDOMParser(FILTER_FACT);
-        expressionDOMParser.setNamespaceContext(namespaces);
         
         
         LOGGER.finer("parsingFilter " + root.getLocalName());
@@ -469,7 +442,7 @@ public final class FilterDOMParser {
                     return FILTER_FACT.touches( left, right );
                     
                 case FilterType.GEOMETRY_CROSSES:
-                    return FILTER_FACT.touches( left, right );
+                    return FILTER_FACT.crosses( left, right );
                     
                 case FilterType.GEOMETRY_WITHIN:
                     return FILTER_FACT.within( left, right );
@@ -604,11 +577,7 @@ public final class FilterDOMParser {
     private static PropertyIsNull parseNullFilter(Node nullNode)
         throws IllegalFilterException {
         
-        //NC - NameSpaceSupport
-        NamespaceSupport namespaces = getNameSpaces(nullNode);
-        
         final ExpressionDOMParser expressionDOMParser = new ExpressionDOMParser(FILTER_FACT);
-        expressionDOMParser.setNamespaceContext(namespaces);
         
         LOGGER.finest("parsing null node: " + nullNode);
 

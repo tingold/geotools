@@ -40,11 +40,15 @@ public class PostFilteringMappingFeatureIterator implements IMappingFeatureItera
     protected int maxFeatures;
     protected int count = 0;
     
-    public PostFilteringMappingFeatureIterator(FeatureIterator<Feature> iterator, Filter filter, int maxFeatures) {
+    public PostFilteringMappingFeatureIterator(FeatureIterator<Feature> iterator, Filter filter, int maxFeatures, int offset) {
         this.delegate = iterator;
         this.filter = filter;
         this.maxFeatures = maxFeatures;
-        next = getFilteredNext();
+        int startIndex = -1;
+        while (startIndex < offset) {
+            next = getFilteredNext();
+            startIndex++;
+        }
     }
 
     public void close() {
@@ -54,8 +58,14 @@ public class PostFilteringMappingFeatureIterator implements IMappingFeatureItera
     protected Feature getFilteredNext() {
         while (delegate.hasNext() && count < maxFeatures) {
             Feature feature = delegate.next();
-            if (filter.evaluate(feature)) {
-                return feature;
+            try {
+                if (filter.evaluate(feature)) {
+                    return feature;
+                }
+            } catch (NullPointerException e) {
+                // ignore this exception
+                // this is to cater the case if the attribute has no value and 
+                // has been skipped in the delegate DataAccessMappingFeatureIterator
             }
         }
         return null;

@@ -17,6 +17,8 @@
 
 package org.geotools.filter.function;
 
+import static org.geotools.filter.capability.FunctionNameImpl.parameter;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.logging.Level;
@@ -25,8 +27,10 @@ import java.util.logging.Logger;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.feature.FeatureCollection;
+import org.geotools.filter.capability.FunctionNameImpl;
 import org.geotools.util.logging.Logging;
 import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.filter.capability.FunctionName;
 
 /**
  * Calculate the Jenks' Natural Breaks classification for a featurecollection
@@ -40,22 +44,14 @@ public class JenksNaturalBreaksFunction extends ClassificationFunction {
     org.opengis.util.ProgressListener progress;
 
     private static final Logger logger = Logging.getLogger("org.geotools.filter.function");
+    
+    public static FunctionName NAME = new FunctionNameImpl("Jenks",
+            RangedClassifier.class,
+            parameter("value", Double.class),
+            parameter("classes", Integer.class));
 
-    /**
-     * 
-     */
     public JenksNaturalBreaksFunction() {
-        setName("Jenks");
-    }
-
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.geotools.filter.function.ClassificationFunction#getArgCount()
-     */
-    public int getArgCount() {
-        // TODO Auto-generated method stub
-        return 2;
+        super(NAME);
     }
 
     /*
@@ -83,7 +79,7 @@ public class JenksNaturalBreaksFunction extends ClassificationFunction {
         try {
             while (features.hasNext()) {
                 SimpleFeature feature = features.next();
-                final Object result = getExpression().evaluate(feature);
+                final Object result = getParameters().get(0).evaluate(feature);
                 logger.finest("importing " + result);
                 if (result != null) {
                     final Double e = new Double(result.toString());

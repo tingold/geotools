@@ -10,7 +10,7 @@
 	<parent>
 		<groupId>org.geotools</groupId>
 		<artifactId>plugin</artifactId>
-		<version>8-SNAPSHOT</version>
+		<version>13-SNAPSHOT</version>
 	</parent>
 
 
@@ -143,7 +143,6 @@
 		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
-			<version>1.4</version>
 		</dependency>
 		<dependency>
 			<groupId>org.jaitools</groupId>

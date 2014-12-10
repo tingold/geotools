@@ -16,11 +16,46 @@
  */
 package org.geotools.data.wps;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+
+import net.opengis.ows11.ExceptionReportType;
+import net.opengis.ows11.ExceptionType;
+import net.opengis.wps10.DataType;
+import net.opengis.wps10.DocumentOutputDefinitionType;
+import net.opengis.wps10.ExecuteResponseType;
+import net.opengis.wps10.InputDescriptionType;
+import net.opengis.wps10.InputReferenceType;
+import net.opengis.wps10.LiteralDataType;
+import net.opengis.wps10.MethodType;
+import net.opengis.wps10.OutputDataType;
+import net.opengis.wps10.OutputDefinitionType;
+import net.opengis.wps10.ProcessBriefType;
+import net.opengis.wps10.ProcessDescriptionType;
+import net.opengis.wps10.ProcessDescriptionsType;
+import net.opengis.wps10.ProcessOfferingsType;
+import net.opengis.wps10.ResponseDocumentType;
+import net.opengis.wps10.ResponseFormType;
+import net.opengis.wps10.WPSCapabilitiesType;
+import net.opengis.wps10.Wps10Factory;
+
+import org.eclipse.emf.common.util.EList;
+import org.eclipse.emf.ecore.EObject;
+import org.geotools.data.wps.request.DescribeProcessRequest;
+import org.geotools.data.wps.request.ExecuteProcessRequest;
+import org.geotools.data.wps.response.DescribeProcessResponse;
+import org.geotools.data.wps.response.ExecuteProcessResponse;
+import org.geotools.ows.ServiceException;
+import org.geotools.test.OnlineTestCase;
 
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
@@ -32,28 +67,6 @@ import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.Polygon;
 import com.vividsolutions.jts.io.ParseException;
 import com.vividsolutions.jts.io.WKTReader;
-
-import junit.framework.TestCase;
-
-import net.opengis.ows11.ExceptionReportType;
-import net.opengis.wps10.DataType;
-import net.opengis.wps10.ExecuteResponseType;
-import net.opengis.wps10.InputDescriptionType;
-import net.opengis.wps10.LiteralDataType;
-import net.opengis.wps10.OutputDataType;
-import net.opengis.wps10.ProcessBriefType;
-import net.opengis.wps10.ProcessDescriptionType;
-import net.opengis.wps10.ProcessDescriptionsType;
-import net.opengis.wps10.ProcessOfferingsType;
-import net.opengis.wps10.WPSCapabilitiesType;
-
-import org.eclipse.emf.common.util.EList;
-import org.geotools.data.wps.request.DescribeProcessRequest;
-import org.geotools.data.wps.request.ExecuteProcessRequest;
-import org.geotools.data.wps.response.DescribeProcessResponse;
-import org.geotools.data.wps.response.ExecuteProcessResponse;
-import org.geotools.ows.ServiceException;
-import org.geotools.test.OnlineTestCase;
 
 
 /**
@@ -79,6 +92,8 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
     private URL url;
 
     private String processIden;
+
+    private ResponseFormType response ;
 
     /**
      * The wps.geoserver fixture consisting of service and processId.
@@ -176,6 +191,75 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
         assertNotNull(response.getProcessDesc());
     }
 
+    public void testAddReferenceTypeInput() throws ServiceException, IOException
+    {
+
+        // don't run the test if the server is not up
+        if (fixture == null)
+        {
+            return;
+        }
+
+        if (DISABLE)
+        {
+            return;
+        }
+
+        ExecuteProcessRequest request = wps.createExecuteProcessRequest();
+        
+        // reference to the File
+        EObject kmzFileReference = Wps10Factory.eINSTANCE.createInputReferenceType();
+        ((InputReferenceType)kmzFileReference).setMimeType("application/vnd.google-earth.kmz");
+        ((InputReferenceType)kmzFileReference).setMethod(MethodType.GET_LITERAL);
+        ((InputReferenceType)kmzFileReference).setHref("file:///testref");
+        
+        request.addInput("input Gliders KMZ file", Arrays.asList(kmzFileReference));
+        
+        ByteArrayOutputStream out = null;
+        InputStream in = null;
+        BufferedReader reader = null;
+        try
+        {
+            out = new ByteArrayOutputStream();
+            request.performPostOutput(out);
+
+            in = new ByteArrayInputStream(out.toByteArray());
+            reader = new BufferedReader(new InputStreamReader(in));
+
+            StringBuilder postText = new StringBuilder();
+
+            char[] cbuf = new char[1024];
+            int charsRead;
+            while ((charsRead = reader.read(cbuf)) != -1)
+            {
+                postText = postText.append(cbuf, 0, charsRead);
+            }
+
+            assertTrue(postText.toString().contains("wps:Reference"));
+        }
+        catch (Exception e)
+        {
+        	assertFalse(true);
+        }
+        finally
+        {
+            if (reader != null)
+            {
+                reader.close();
+            }
+
+            if (out != null)
+            {
+                out.close();
+            }
+
+            if (in != null)
+            {
+                in.close();
+            }
+        }
+    }
+    
     /**
      * run multiple buffer tests with various geometry types
      *
@@ -299,14 +383,14 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
         {
             // set buffer input
             DataType input = WPSUtils.createInputDataType(bufferAmnt, idt);
-            List<DataType> list = new ArrayList<DataType>();
+            List<EObject> list = new ArrayList<EObject>();
             list.add(input);
             exeRequest.addInput(idt.getIdentifier().getValue(), list);
             // set geom input
             idt = (InputDescriptionType) pdt.getDataInputs().getInput().get(1);
 
             DataType input2 = WPSUtils.createInputDataType(geom1, idt);
-            List<DataType> list2 = new ArrayList<DataType>();
+            List<EObject> list2 = new ArrayList<EObject>();
             list2.add(input2);
             exeRequest.addInput(idt.getIdentifier().getValue(), list2);
         }
@@ -314,14 +398,14 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
         {
             // set geom input
             DataType input2 = WPSUtils.createInputDataType(geom1, idt);
-            List<DataType> list2 = new ArrayList<DataType>();
+            List<EObject> list2 = new ArrayList<EObject>();
             list2.add(input2);
             exeRequest.addInput(idt.getIdentifier().getValue(), list2);
             // set buffer input
             idt = (InputDescriptionType) pdt.getDataInputs().getInput().get(1);
 
             DataType input = WPSUtils.createInputDataType(bufferAmnt, idt);
-            List<DataType> list = new ArrayList<DataType>();
+            List<EObject> list = new ArrayList<EObject>();
             list.add(input);
             exeRequest.addInput(idt.getIdentifier().getValue(), list);
         }
@@ -409,7 +493,7 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
 
         // create and set the input on the exe request
         DataType input = WPSUtils.createInputDataType(geom1, idt);
-        List<DataType> list = new ArrayList<DataType>();
+        List<EObject> list = new ArrayList<EObject>();
         list.add(input);
         exeRequest.addInput(idt.getIdentifier().getValue(), list);
     }
@@ -476,6 +560,10 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
         exeRequest.setIdentifier(processIdenLocal);
 
         setLocalInputDataUnion(exeRequest, processDesc);
+        
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        exeRequest.performPostOutput(bos);
+        System.out.println(bos.toString());
 
         // send the request
         ExecuteProcessResponse response = wps.issueRequest(exeRequest);
@@ -498,21 +586,20 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
         InputDescriptionType idt = (InputDescriptionType) pdt.getDataInputs().getInput().get(0);
 
         // create polygons for the input
-        WKTReader reader = new WKTReader(new GeometryFactory());
-        Geometry geom1 = (Polygon) reader.read("POLYGON((20 10, 30 0, 40 10, 30 20, 20 10))");
-        Geometry geom2 = (Polygon) reader.read("POLYGON((20 30, 30 0, 20 20, 80 20, 20 30))");
-        Geometry geom3 = (Polygon) reader.read("POLYGON((177 10, 30 88, 40 70, 46 20, 177 10))");
-        Geometry geom4 = (Polygon) reader.read("POLYGON((5 10, 5 0, 13 10, 5 20, 5 10))");
+        String geom1 = "POLYGON((20 10, 30 0, 40 10, 30 20, 20 10))";
+        String geom2 = "POLYGON((20 30, 30 0, 20 20, 80 20, 20 30))";
+        String geom3 = "POLYGON((177 10, 30 88, 40 70, 46 20, 177 10))";
+        String geom4 = "POLYGON((5 10, 5 0, 13 10, 5 20, 5 10))";
 
         // create and set the input on the exe request
         if (idt.getIdentifier().getValue().equalsIgnoreCase("geom"))
         {
             // set geom inputs
-            List<DataType> list = new ArrayList<DataType>();
-            DataType input = WPSUtils.createInputDataType(geom1, idt);
-            DataType input2 = WPSUtils.createInputDataType(geom2, idt);
-            DataType input3 = WPSUtils.createInputDataType(geom3, idt);
-            DataType input4 = WPSUtils.createInputDataType(geom4, idt);
+            List<EObject> list = new ArrayList<EObject>();
+            DataType input = WPSUtils.createInputDataType(geom1, WPSUtils.INPUTTYPE_COMPLEXDATA, "application/wkt");
+            DataType input2 = WPSUtils.createInputDataType(geom2, WPSUtils.INPUTTYPE_COMPLEXDATA, "application/wkt");
+            DataType input3 = WPSUtils.createInputDataType(geom3, WPSUtils.INPUTTYPE_COMPLEXDATA, "application/wkt");
+            DataType input4 = WPSUtils.createInputDataType(geom4, WPSUtils.INPUTTYPE_COMPLEXDATA, "application/wkt");
             list.add(input);
             list.add(input2);
             list.add(input3);
@@ -623,16 +710,455 @@ public class OnlineWPSManualRequestTest extends OnlineTestCase
         Double d2 = 40039.229;
 
         // create and set the input on the exe request
-        List<DataType> list = new ArrayList<DataType>();
+        List<EObject> list = new ArrayList<EObject>();
         DataType input = WPSUtils.createInputDataType(d1, idt);
         list.add(input);
         exeRequest.addInput(idt.getIdentifier().getValue(), list);
 
         InputDescriptionType idt2 = (InputDescriptionType) pdt.getDataInputs().getInput().get(1);
-        List<DataType> list2 = new ArrayList<DataType>();
+        List<EObject> list2 = new ArrayList<EObject>();
         DataType input2 = WPSUtils.createInputDataType(d2, idt2);
         list2.add(input2);
         exeRequest.addInput(idt2.getIdentifier().getValue(), list2);
 
     }
+    
+    /**
+     * Try to get an area grid in arcgrid format, raw
+     *
+     * @throws ServiceException
+     * @throws IOException
+     * @throws ParseException
+     */
+    public void testExecuteLocalAreaGrid() throws ServiceException, IOException, ParseException
+    {
+
+        // don't run the test if the server is not up
+        if (fixture == null)
+        {
+            return;
+        }
+
+        if (DISABLE)
+        {
+            return;
+        }
+
+        String processIdenLocal = "gs:AreaGrid";
+
+        WPSCapabilitiesType capabilities = wps.getCapabilities();
+
+        // get the first process and execute it
+        ProcessOfferingsType processOfferings = capabilities.getProcessOfferings();
+        EList processes = processOfferings.getProcess();
+        // ProcessBriefType process = (ProcessBriefType) processes.get(0);
+
+        // does the server contain the specific process I want
+        boolean found = false;
+        Iterator iterator = processes.iterator();
+        while (iterator.hasNext())
+        {
+            ProcessBriefType process = (ProcessBriefType) iterator.next();
+            if (process.getIdentifier().getValue().equalsIgnoreCase(processIdenLocal))
+            {
+                found = true;
+
+                break;
+            }
+        }
+
+        // exit test if my process doesn't exist on server
+        if (!found)
+        {
+            System.out.println("Skipping, gs:AreaGrid not found!");
+            return;
+        }
+
+        // do a full describeprocess on my process
+        DescribeProcessRequest descRequest = wps.createDescribeProcessRequest();
+        descRequest.setIdentifier(processIdenLocal);
+
+        DescribeProcessResponse descResponse = wps.issueRequest(descRequest);
+
+        // based on the describeprocess, setup the execute
+        ProcessDescriptionsType processDesc = descResponse.getProcessDesc();
+        ExecuteProcessRequest exeRequest = wps.createExecuteProcessRequest();
+        exeRequest.setIdentifier(processIdenLocal);
+        exeRequest.addInput("envelope", Arrays.asList(wps.createBoundingBoxInputValue("EPSG:4326", 2, Arrays.asList(-180d, -90d), Arrays.asList(180d, 90d))));
+        exeRequest.addInput("width", Arrays.asList(wps.createLiteralInputValue("2")));
+        exeRequest.addInput("height", Arrays.asList(wps.createLiteralInputValue("1")));
+        OutputDefinitionType rawOutput = wps.createOutputDefinitionType("result");
+        rawOutput.setMimeType("application/arcgrid");
+        ResponseFormType responseForm = wps.createResponseForm(null, rawOutput);
+        exeRequest.setResponseForm(responseForm);
+
+        // send the request
+        ExecuteProcessResponse response = wps.issueRequest(exeRequest);
+
+        // response should not be null and no exception should occur.
+        assertNotNull(response);
+
+        // we should get a raw response, no exception, no response document
+        ExecuteResponseType executeResponse = response.getExecuteResponse();
+        assertNull(executeResponse);
+        ExceptionReportType exceptionResponse = response.getExceptionResponse();
+        assertNull(exceptionResponse);
+
+        // check result correctness
+        assertEquals("application/arcgrid", response.getRawContentType());
+        BufferedReader reader = new BufferedReader(new InputStreamReader(response.getRawResponseStream()));
+        StringBuilder sb = new StringBuilder();
+        String line = null;
+        while((line = reader.readLine()) != null) {
+            sb.append(line).append("\n");
+        }
+        reader.close();
+        String arcgrid = sb.toString();
+        String expectedHeader = "NCOLS 2\n" + 
+        		"NROWS 1\n" + 
+        		"XLLCORNER -180.0\n" + 
+        		"YLLCORNER -90.0\n" + 
+        		"CELLSIZE 180.0\n" + 
+        		"NODATA_VALUE -9999";
+        assertTrue(arcgrid.startsWith(expectedHeader));
+    }
+    
+    /**
+     * Request for area grid with raw output but wrong parameters, check the response is an exception
+     *
+     * @throws ServiceException
+     * @throws IOException
+     * @throws ParseException
+     */
+    public void testExecuteLocalAreaGridException() throws ServiceException, IOException, ParseException
+    {
+
+        // don't run the test if the server is not up
+        if (fixture == null)
+        {
+            return;
+        }
+
+        if (DISABLE)
+        {
+            return;
+        }
+
+        String processIdenLocal = "gs:AreaGrid";
+
+        WPSCapabilitiesType capabilities = wps.getCapabilities();
+
+        // get the first process and execute it
+        ProcessOfferingsType processOfferings = capabilities.getProcessOfferings();
+        EList processes = processOfferings.getProcess();
+        // ProcessBriefType process = (ProcessBriefType) processes.get(0);
+
+        // does the server contain the specific process I want
+        boolean found = false;
+        Iterator iterator = processes.iterator();
+        while (iterator.hasNext())
+        {
+            ProcessBriefType process = (ProcessBriefType) iterator.next();
+            if (process.getIdentifier().getValue().equalsIgnoreCase(processIdenLocal))
+            {
+                found = true;
+
+                break;
+            }
+        }
+
+        // exit test if my process doesn't exist on server
+        if (!found)
+        {
+            System.out.println("Skipping, gs:AreaGrid not found!");
+            return;
+        }
+
+        // build the request
+        ExecuteProcessRequest exeRequest = wps.createExecuteProcessRequest();
+        exeRequest.setIdentifier(processIdenLocal);
+        exeRequest.addInput("envelope", Arrays.asList(wps.createBoundingBoxInputValue("EPSG:4326", 2, Arrays.asList(-180d, -90d), Arrays.asList(180d, 90d))));
+        // don't set the width, height required params
+        //        exeRequest.addInput("width", Arrays.asList(wps.createLiteralInputValue("abc")));
+        //        exeRequest.addInput("height", Arrays.asList(wps.createLiteralInputValue("def")));
+        OutputDefinitionType rawOutput = wps.createOutputDefinitionType("result");
+        rawOutput.setMimeType("application/arcgrid");
+        ResponseFormType responseForm = wps.createResponseForm(null, rawOutput);
+        exeRequest.setResponseForm(responseForm);
+
+        // send the request
+        ExecuteProcessResponse response = wps.issueRequest(exeRequest);
+
+        // response should not be null and no exception should occur.
+        assertNotNull(response);
+
+        // we should get a raw response, no exception, no response document
+        ExecuteResponseType executeResponse = response.getExecuteResponse();
+        assertNotNull(executeResponse);
+        assertNotNull(executeResponse.getStatus().getProcessFailed());
+        assertNotNull( executeResponse.getStatus().getProcessFailed().getExceptionReport());
+    }
+    
+    /**
+     * Try to get an area grid with output in asynchronous mode
+     *
+     * @throws ServiceException
+     * @throws IOException
+     * @throws ParseException
+     */
+    public void testExecuteAsynchAreaGrid() throws ServiceException, IOException, ParseException
+    {
+
+        // don't run the test if the server is not up
+        if (fixture == null)
+        {
+            return;
+        }
+
+        if (DISABLE)
+        {
+            return;
+        }
+
+        String processIdenLocal = "gs:AreaGrid";
+
+        WPSCapabilitiesType capabilities = wps.getCapabilities();
+
+        // get the first process and execute it
+        ProcessOfferingsType processOfferings = capabilities.getProcessOfferings();
+        EList processes = processOfferings.getProcess();
+        // ProcessBriefType process = (ProcessBriefType) processes.get(0);
+
+        // does the server contain the specific process I want
+        boolean found = false;
+        Iterator iterator = processes.iterator();
+        while (iterator.hasNext())
+        {
+            ProcessBriefType process = (ProcessBriefType) iterator.next();
+            if (process.getIdentifier().getValue().equalsIgnoreCase(processIdenLocal))
+            {
+                found = true;
+
+                break;
+            }
+        }
+
+        // exit test if my process doesn't exist on server
+        if (!found)
+        {
+            System.out.println("Skipping, gs:AreaGrid not found!");
+            return;
+        }
+
+        // based on the describeprocess, setup the execute
+        ExecuteProcessRequest exeRequest = wps.createExecuteProcessRequest();
+        exeRequest.setIdentifier(processIdenLocal);
+        exeRequest.addInput("envelope", Arrays.asList(wps.createBoundingBoxInputValue("EPSG:4326", 2, Arrays.asList(-180d, -90d), Arrays.asList(180d, 90d))));
+        exeRequest.addInput("width", Arrays.asList(wps.createLiteralInputValue("100")));
+        exeRequest.addInput("height", Arrays.asList(wps.createLiteralInputValue("50")));
+        ResponseDocumentType doc = wps.createResponseDocumentType(false, true, true, "result");
+        DocumentOutputDefinitionType odt = (DocumentOutputDefinitionType) doc.getOutput().get(0);
+        odt.setMimeType("application/arcgrid");
+        odt.setAsReference(true);
+        ResponseFormType responseForm = wps.createResponseForm(doc, null);
+        exeRequest.setResponseForm(responseForm);
+
+        // send the request
+        ExecuteProcessResponse response = wps.issueRequest(exeRequest);
+
+        // response should not be null and no exception should occur.
+        assertNotNull(response);
+
+        // we should get a raw response, no exception, no response document
+        ExecuteResponseType executeResponse = response.getExecuteResponse();
+        assertNotNull(executeResponse);
+
+        // loop and wait for the process to be complete
+        while(executeResponse.getStatus().getProcessFailed() == null 
+                && executeResponse.getStatus().getProcessSucceeded() == null) {
+            
+            String location = executeResponse.getStatusLocation();
+            URL url = new URL(location);
+            response = wps.issueStatusRequest(url);
+            
+            executeResponse = response.getExecuteResponse();
+            assertNotNull(executeResponse);
+        }
+
+        // check result correctness
+        assertEquals(1, executeResponse.getProcessOutputs().getOutput().size());
+        OutputDataType output = (OutputDataType) executeResponse.getProcessOutputs().getOutput().get(0);
+        
+        assertEquals("result", output.getIdentifier().getValue());
+        assertEquals("application/arcgrid", output.getReference().getMimeType());
+        assertNotNull(output.getReference().getHref());
+        
+        URL dataURL = new URL(output.getReference().getHref());
+        BufferedReader reader = new BufferedReader(new InputStreamReader(dataURL.openStream()));
+        StringBuilder sb = new StringBuilder();
+        String line = null;
+        int count = 0;
+        while((line = reader.readLine()) != null && count <= 5) {
+            sb.append(line).append("\n");
+            count++;
+        }
+        reader.close();
+        String arcgrid = sb.toString();
+        String expectedHeader = "NCOLS 100\n" + 
+                "NROWS 50\n" + 
+                "XLLCORNER -180.0\n" + 
+                "YLLCORNER -90.0\n" + 
+                "CELLSIZE 3.6\n" + 
+                "NODATA_VALUE -9999";
+        System.out.println(arcgrid);
+        assertTrue(arcgrid.startsWith(expectedHeader));
+    }
+    
+    /**
+     * Test exception parsing on invalid process request
+     *
+     * @throws ServiceException
+     * @throws IOException
+     * @throws ParseException
+     */
+    public void testInvalidProcess() throws ServiceException, IOException, ParseException
+    {
+
+        // don't run the test if the server is not up
+        if (fixture == null)
+        {
+            return;
+        }
+
+        if (DISABLE)
+        {
+            return;
+        }
+
+        String processIdenLocal = "gs:InvalidProcessName";
+
+        WPSCapabilitiesType capabilities = wps.getCapabilities();
+
+        // get the first process and execute it
+        ProcessOfferingsType processOfferings = capabilities.getProcessOfferings();
+        EList processes = processOfferings.getProcess();
+        // ProcessBriefType process = (ProcessBriefType) processes.get(0);
+
+        // does the server contain the specific process I want
+        boolean found = false;
+        Iterator iterator = processes.iterator();
+        while (iterator.hasNext())
+        {
+            ProcessBriefType process = (ProcessBriefType) iterator.next();
+            if (process.getIdentifier().getValue().equalsIgnoreCase(processIdenLocal))
+            {
+                found = true;
+
+                break;
+            }
+        }
+
+        // exit test if my process doesn't exist on server
+        if (found)
+        {
+            System.out.println("Skipping, gs:InvalidProcessName has been found!");
+            return;
+        }
+
+        // setup a fake call to fake process
+        ExecuteProcessRequest exeRequest = wps.createExecuteProcessRequest();
+        exeRequest.setIdentifier(processIdenLocal);
+        ResponseDocumentType doc = wps.createResponseDocumentType(false, true, true, "result");
+        DocumentOutputDefinitionType odt = (DocumentOutputDefinitionType) doc.getOutput().get(0);
+        odt.setMimeType("application/arcgrid");
+        odt.setAsReference(true);
+        ResponseFormType responseForm = wps.createResponseForm(doc, null);
+        exeRequest.setResponseForm(responseForm);
+
+        // send the request
+        ExecuteProcessResponse response = wps.issueRequest(exeRequest);
+
+        // response should not be null and no exception should occur.
+        assertNotNull(response);
+
+        // we should get an exception
+        ExceptionReportType report = response.getExceptionResponse();
+        assertNotNull(report);
+        ExceptionType exception = (ExceptionType) report.getException().get(0);
+        String errorMessage = exception.getExceptionText().get(0).toString();
+        assertTrue(errorMessage.contains(processIdenLocal));
+    }
+    
+    /**
+     * Make sure we get the proper exception report
+     *
+     * @throws ServiceException
+     * @throws IOException
+     * @throws ParseException
+     */
+    public void testInvalidParamsRawOutput() throws ServiceException, IOException, ParseException
+    {
+
+        // don't run the test if the server is not up
+        if (fixture == null)
+        {
+            return;
+        }
+
+        if (DISABLE)
+        {
+            return;
+        }
+
+        String processIdenLocal = "gs:AreaGrid";
+
+        WPSCapabilitiesType capabilities = wps.getCapabilities();
+
+        // get the first process and execute it
+        ProcessOfferingsType processOfferings = capabilities.getProcessOfferings();
+        EList processes = processOfferings.getProcess();
+        // ProcessBriefType process = (ProcessBriefType) processes.get(0);
+
+        // does the server contain the specific process I want
+        boolean found = false;
+        Iterator iterator = processes.iterator();
+        while (iterator.hasNext())
+        {
+            ProcessBriefType process = (ProcessBriefType) iterator.next();
+            if (process.getIdentifier().getValue().equalsIgnoreCase(processIdenLocal))
+            {
+                found = true;
+
+                break;
+            }
+        }
+
+        // exit test if my process doesn't exist on server
+        if (!found)
+        {
+            System.out.println("Skipping, gs:AreaGrid not found!");
+            return;
+        }
+
+        // based on the describeprocess, setup the execute
+        ExecuteProcessRequest exeRequest = wps.createExecuteProcessRequest();
+        exeRequest.setIdentifier(processIdenLocal);
+        // don't send over the inputs
+        OutputDefinitionType rawOutput = wps.createOutputDefinitionType("result");
+        rawOutput.setMimeType("application/arcgrid");
+        ResponseFormType responseForm = wps.createResponseForm(null, rawOutput);
+        exeRequest.setResponseForm(responseForm);
+
+        // send the request
+        ExecuteProcessResponse response = wps.issueRequest(exeRequest);
+
+        // response should not be null and no exception should occur.
+        assertNotNull(response);
+
+        // we should get an exception here too
+        ExceptionReportType report = response.getExceptionResponse();
+        assertNotNull(report);
+    }
+    
+    
 }

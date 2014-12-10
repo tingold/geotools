@@ -42,7 +42,7 @@ import org.geotools.data.FeatureSource;
 import org.geotools.data.complex.config.AppSchemaDataAccessConfigurator;
 import org.geotools.data.complex.config.AppSchemaDataAccessDTO;
 import org.geotools.data.complex.config.EmfAppSchemaReader;
-import org.geotools.data.complex.config.FeatureTypeRegistry;
+import org.geotools.data.complex.config.AppSchemaFeatureTypeRegistry;
 import org.geotools.data.complex.config.XMLConfigDigester;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
@@ -57,7 +57,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.opengis.feature.Attribute;
 import org.opengis.feature.Feature;
-import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.feature.type.AttributeType;
 import org.opengis.feature.type.ComplexType;
@@ -153,7 +152,7 @@ public class TimeSeriesTest extends AppSchemaTestSupport {
             throw e;
         }
 
-        final FeatureTypeRegistry typeRegistry = new FeatureTypeRegistry();
+        final AppSchemaFeatureTypeRegistry typeRegistry = new AppSchemaFeatureTypeRegistry();
         try {
             typeRegistry.addSchemas(schemaIndex);
     
@@ -465,7 +464,7 @@ public class TimeSeriesTest extends AppSchemaTestSupport {
         it.close();
 
         count = 0;
-        Iterator<SimpleFeature> simpleIterator = ((AbstractMappingFeatureIterator) features.features()).getSourceFeatureIterator();
+        FeatureIterator<? extends Feature> simpleIterator = ((AbstractMappingFeatureIterator) features.features()).getSourceFeatureIterator();
         for (; simpleIterator.hasNext();) {
             feature = (Feature) simpleIterator.next();
             count++;

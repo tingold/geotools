@@ -58,6 +58,8 @@ import org.opengis.referencing.ReferenceIdentifier;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.crs.SingleCRS;
 import org.opengis.referencing.datum.PixelInCell;
+import org.opengis.referencing.operation.CoordinateOperation;
+import org.opengis.referencing.operation.CoordinateOperationFactory;
 import org.opengis.referencing.operation.MathTransform;
 import org.opengis.referencing.operation.MathTransform2D;
 import org.opengis.referencing.operation.NoninvertibleTransformException;
@@ -115,8 +117,6 @@ class RasterLayerRequest {
 	private MathTransform destinationToSourceTransform;
 
 	private GeneralEnvelope requestedBBOXInCoverageGeographicCRS;
-
-	private MathTransform requestCRSToCoverageGeographicCRS2D;
 
 	private GeneralEnvelope approximateRequestedBBoInNativeCRS;
 
@@ -593,7 +593,8 @@ class RasterLayerRequest {
     		// reproject the crop bbox back and then crop, notice that we are imposing 
     		//
     		try {
-				final GeneralEnvelope cropBBOXInRequestCRS=CRS.transform(destinationToSourceTransform.inverse(), cropBBox);
+                final GeneralEnvelope cropBBOXInRequestCRS = CRS.transform(cropBBox,
+                        requestedBBox.getCoordinateReferenceSystem());
 				cropBBOXInRequestCRS.setCoordinateReferenceSystem(requestedBBox.getCoordinateReferenceSystem());
 				//make sure it falls within the requested envelope
 				cropBBOXInRequestCRS.intersect(requestedBBox);
@@ -811,7 +812,8 @@ class RasterLayerRequest {
             // now transform the requested envelope to source crs
             if (destinationToSourceTransform != null && !destinationToSourceTransform.isIdentity())
             {
-            	final GeneralEnvelope temp = CRS.transform(destinationToSourceTransform,requestedBBox);
+                final GeneralEnvelope temp = CRS.transform(requestedBBox,
+                        rasterManager.spatialDomainManager.coverageCRS2D);
             	temp.setCoordinateReferenceSystem(rasterManager.spatialDomainManager.coverageCRS2D);
             	cropBBox= new ReferencedEnvelope(temp);
             	
@@ -870,12 +872,12 @@ class RasterLayerRequest {
         	// STEP 1 reproject the requested envelope to the coverage geographic bbox
 	        if(!CRS.equalsIgnoreMetadata(rasterManager.spatialDomainManager.coverageGeographicCRS2D, requestCRS)){
 	        	//try to convert the requested bbox to the coverage geocrs
-	        	requestCRSToCoverageGeographicCRS2D=CRS.findMathTransform(requestCRS, rasterManager.spatialDomainManager.coverageGeographicCRS2D,true);
-	        	if(!requestCRSToCoverageGeographicCRS2D.isIdentity())
-	        	{
-	        		requestedBBOXInCoverageGeographicCRS=CRS.transform(requestCRSToCoverageGeographicCRS2D,requestedBBox);
-	        		requestedBBOXInCoverageGeographicCRS.setCoordinateReferenceSystem(rasterManager.spatialDomainManager.coverageGeographicCRS2D);
-	        	}
+                CoordinateOperationFactory factory = CRS.getCoordinateOperationFactory(true);
+                CoordinateOperation op = factory.createOperation(requestCRS,
+                        rasterManager.spatialDomainManager.coverageGeographicCRS2D);
+                requestedBBOXInCoverageGeographicCRS = CRS.transform(op, requestedBBox);
+                requestedBBOXInCoverageGeographicCRS
+                        .setCoordinateReferenceSystem(rasterManager.spatialDomainManager.coverageGeographicCRS2D);
 	        }
 	        if(requestedBBOXInCoverageGeographicCRS==null)
 	        	requestedBBOXInCoverageGeographicCRS= new GeneralEnvelope(requestCRS);
@@ -894,8 +896,9 @@ class RasterLayerRequest {
 	        requestedBBOXInCoverageGeographicCRS.setCoordinateReferenceSystem(rasterManager.spatialDomainManager.coverageGeographicCRS2D);
 	        
 	        // now go back to the coverage native CRS in order to compute an approximate requested resolution
-	        final MathTransform transform = CRS.findMathTransform(requestedBBOXInCoverageGeographicCRS.getCoordinateReferenceSystem(),rasterManager.spatialDomainManager.coverageCRS2D, true);
-	        approximateRequestedBBoInNativeCRS = CRS.transform(transform, requestedBBOXInCoverageGeographicCRS);
+            approximateRequestedBBoInNativeCRS = CRS.transform(
+                    requestedBBOXInCoverageGeographicCRS,
+                    rasterManager.spatialDomainManager.coverageCRS2D);
 	    	approximateRequestedBBoInNativeCRS.setCoordinateReferenceSystem(rasterManager.spatialDomainManager.coverageCRS2D);
 	    	cropBBox = new ReferencedEnvelope(approximateRequestedBBoInNativeCRS);     
 	    	

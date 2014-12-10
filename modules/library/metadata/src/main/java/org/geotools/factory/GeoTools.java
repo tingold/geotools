@@ -17,6 +17,8 @@
 package org.geotools.factory;
 
 import java.awt.RenderingHints;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,12 +40,12 @@ import javax.swing.event.EventListenerList;
 
 import org.geotools.resources.Arguments;
 import org.geotools.resources.Classes;
-import org.geotools.resources.i18n.Errors;
 import org.geotools.resources.i18n.ErrorKeys;
-import org.geotools.util.logging.LoggerFactory;
-import org.geotools.util.logging.Logging;
+import org.geotools.resources.i18n.Errors;
 import org.geotools.util.Utilities;
 import org.geotools.util.Version;
+import org.geotools.util.logging.LoggerFactory;
+import org.geotools.util.logging.Logging;
 
 
 /**
@@ -79,35 +81,38 @@ public final class GeoTools {
      */
     private static final Properties PROPS;  
     static {
-        Properties props = new Properties();
-        try {
-            props.load(GeoTools.class.getResourceAsStream("GeoTools.properties"));
+        PROPS = loadProperites("GeoTools.properties");
+    }
 
-            //load git info if it is avaialble
-            if (GeoTools.class.getResource("/git.properties") != null) {
-                props.load(GeoTools.class.getResourceAsStream("/git.properties"));
+    private static Properties loadProperites(String resource) {
+        Properties props = new Properties();
+        InputStream stream = GeoTools.class.getResourceAsStream(resource);
+        if (stream != null) {
+            try {
+                props.load(stream);
+            } catch (IOException ignore) {
+            } finally {
+                try {
+                    stream.close();
+                } catch (IOException ignore) {
+                }
             }
         }
-        catch(Exception e) {}
-        
-        PROPS = props;
+
+        return props;
     }
-    
+
     /**
      * The current GeoTools version. The separator character must be the dot.
      */
-    private static final Version VERSION = new Version(PROPS.getProperty("version", "8-SNAPSHOT"));
+    private static final Version VERSION = new Version(PROPS.getProperty("version", "13-SNAPSHOT"));
 
     /**
      * The version control (svn) revision at which this version of geotools was built.
      */
     private static final String BUILD_REVISION;
     static {
-        String rev = PROPS.getProperty("build.revision", "-1");
-        if ("-1".equals(rev)) {
-            rev = PROPS.getProperty("git.commit.id", "-1");
-        }
-        BUILD_REVISION = rev;
+        BUILD_REVISION = PROPS.getProperty("build.revision", "-1");
     }
 
     /**
@@ -384,50 +389,73 @@ public final class GeoTools {
     }
 
     /**
-     * Initializes GeoTools for use. This convenience method performs various tasks (more may
-     * be added in the future), including setting up the {@linkplain java.util.logging Java
-     * logging framework} in one of the following states:
+     * Initializes GeoTools for use. This convenience method performs various tasks (more may be added in the future), including setting up the
+     * {@linkplain java.util.logging Java logging framework} in one of the following states:
      * <p>
      * <ul>
-     *   <li>If the <A HREF="http://jakarta.apache.org/commons/logging/">Commons-logging</A>
-     *       framework is available, then every logging message in the {@code org.geotools}
-     *       namespace sent to the Java {@linkplain java.util.logging.Logger logger} are
-     *       redirected to Commons-logging.</li>
-     *
-     *   <li>Otherwise if the <A HREF="http://logging.apache.org/log4j">Log4J</A> framework is
-     *       available, then every logging message in the {@code org.geotools} namespace sent
-     *       to the Java {@linkplain java.util.logging.Logger logger} are redirected to Log4J.</li>
-     *
-     *   <li>Otherwise, the Java logging {@linkplain java.util.logging.Formatter formatter} for
-     *       console output is replaced by a {@linkplain org.geotools.util.logging.MonolineFormatter
-     *       monoline formatter}.</li>
+     * <li>If the <A HREF="http://jakarta.apache.org/commons/logging/">Commons-logging</A> framework is available, then every logging message in the
+     * {@code org.geotools} namespace sent to the Java {@linkplain java.util.logging.Logger logger} are redirected to Commons-logging.</li>
+     * 
+     * <li>Otherwise if the <A HREF="http://logging.apache.org/log4j">Log4J</A> framework is available, then every logging message in the
+     * {@code org.geotools} namespace sent to the Java {@linkplain java.util.logging.Logger logger} are redirected to Log4J.</li>
+     * 
+     * <li>Otherwise, the Java logging {@linkplain java.util.logging.Formatter formatter} for console output is replaced by a
+     * {@linkplain org.geotools.util.logging.MonolineFormatter monoline formatter}.</li>
      * </ul>
      * <p>
-     * In addition, the {@linkplain #getDefaultHints default hints} are initialized to the
-     * specified {@code hints}.
+     * In addition, the {@linkplain #getDefaultHints default hints} are initialized to the specified {@code hints}.
      * <p>
-     * Note that invoking this method is usually <strong>not</strong> needed for proper working
-     * of the Geotools library. It is just a convenience method for overwriting some Java and
-     * Geotools default settings in a way that seems to be common in server environment. Such
-     * overwriting may not be wanted for every situations.
+     * Invoking this method is <strong>not</strong> required fpr the GeoTools library to function. It is just a convenience method for overwriting
+     * select Java and GeoTools default settings. Supplying these defaults is not desirable in all settings, such as writing test cases.
      * <p>
-     * Example of typical invocation in a Geoserver environment:
-     *
-     * <blockquote><pre>
+     * Example of typical invocation in a GeoServer environment:
+     * 
+     * <pre><code>
      * Hints hints = new Hints();
      * hints.put({@linkplain Hints#FORCE_LONGITUDE_FIRST_AXIS_ORDER}, Boolean.TRUE);
      * hints.put({@linkplain Hints#FORCE_AXIS_ORDER_HONORING}, "http");
      * GeoTools.init(hints);
-     * </pre></blockquote>
-     *
+     * </code></pre>
+     * 
      * @param hints The hints to use.
-     *
+     * 
      * @see Logging#setLoggerFactory(String)
      * @see Logging#forceMonolineConsoleOutput
      * @see Hints#putSystemDefault
      * @see #getDefaultHints
      */
     public static void init(final Hints hints) {
+        init();
+        if (hints != null) {
+            // This will trigger fireConfigurationChanged()
+            Hints.putSystemDefault(hints);
+        }
+    }
+    /**
+     * Initializes GeoTools for use. This convenience method performs various tasks (more may be added in the future), including setting up the
+     * {@linkplain java.util.logging Java logging framework} in one of the following states:
+     * <p>
+     * <ul>
+     * <li>If the <A HREF="http://jakarta.apache.org/commons/logging/">Commons-logging</A> framework is available, then every logging message in the
+     * {@code org.geotools} namespace sent to the Java {@linkplain java.util.logging.Logger logger} are redirected to Commons-logging.</li>
+     * 
+     * <li>Otherwise if the <A HREF="http://logging.apache.org/log4j">Log4J</A> framework is available, then every logging message in the
+     * {@code org.geotools} namespace sent to the Java {@linkplain java.util.logging.Logger logger} are redirected to Log4J.</li>
+     * 
+     * <li>Otherwise, the Java logging {@linkplain java.util.logging.Formatter formatter} for console output is replaced by a
+     * {@linkplain org.geotools.util.logging.MonolineFormatter monoline formatter}.</li>
+     * </ul>
+     * <p>
+     * Invoking this method is <strong>not</strong> required fpr the GeoTools library to function. It is just a convenience method for overwriting
+     * select Java and GeoTools default settings. Supplying these defaults is not desirable in all settings, such as writing test cases.
+     * <p>
+     * 
+     * @see Logging#setLoggerFactory(String)
+     * @see Logging#forceMonolineConsoleOutput
+     * @see Hints#putSystemDefault
+     * @see #getDefaultHints
+     */
+    public static void init(){
         final Logging log = Logging.GEOTOOLS;
         try {
             log.setLoggerFactory("org.geotools.util.logging.CommonsLoggerFactory");
@@ -442,14 +470,9 @@ public final class GeoTools {
         if (log.getLoggerFactory() == null) {
             log.forceMonolineConsoleOutput();
         }
-        if (hints != null) {
-            Hints.putSystemDefault(hints);
-            // fireConfigurationChanged() is invoked in the above method call.
-        }
     }
-
     /**
-     * Forces the initial context for test cases, or as needed.
+     * Provides GeoTools with the JNDI context for resource lookup.
      *
      * @param applicationContext The initial context to use.
      *
@@ -474,8 +497,7 @@ public final class GeoTools {
      * @return {@code true} if at least one hint changed as a result of this scan,
      *         or {@code false} otherwise.
      */
-    static boolean scanForSystemHints(final Hints hints) {
-        assert Thread.holdsLock(hints);
+    static boolean scanForSystemHints(final Map<RenderingHints.Key, Object> hints) {
         boolean changed = false;
         synchronized (BINDINGS) {
             for (final Map.Entry<String, RenderingHints.Key> entry : BINDINGS.entrySet()) {
@@ -733,7 +755,7 @@ public final class GeoTools {
     static Set<ClassLoader> getClassLoaders() {
         return addedClassLoaders;
     }
-    
+
     /**
      * Reports the GeoTools {@linkplain #getVersion version} number to the
      * {@linkplain System#out standard output stream}.

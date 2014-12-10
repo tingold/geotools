@@ -21,12 +21,14 @@ import java.io.Writer;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.geotools.data.jdbc.FilterToSQL;
 import org.geotools.factory.Hints;
 import org.geotools.factory.Hints.Key;
+import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.jdbc.BasicSQLDialect;
 import org.geotools.jdbc.JDBCDataStore;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -65,9 +67,19 @@ public class DB2SQLDialectBasic extends BasicSQLDialect {
     public FilterToSQL createFilterToSQL() {
     	DB2FilterToSQL filter = new DB2FilterToSQL((Writer) null);
     	filter.setFunctionEncodingEnabled(isFunctionEncodingEnabled());
+    	filter.setLooseBBOXEnabled(delegate.isLooseBBOXEnabled());
         return filter;
     }
 
+    public boolean isLooseBBOXEnabled() {
+        return delegate.isLooseBBOXEnabled();
+    }
+
+    public void setLooseBBOXEnabled(boolean looseBBOXEnabled) {
+        delegate.setLooseBBOXEnabled(looseBBOXEnabled);
+    }    
+
+    
     
     @Override
     public void encodePrimaryKey(String column, StringBuffer sql) {
@@ -100,6 +112,12 @@ public class DB2SQLDialectBasic extends BasicSQLDialect {
         delegate.encodeGeometryColumn(gatt, prefix, srid, sql);
     }
 
+    @Override
+    public void encodeGeometryColumn(GeometryDescriptor gatt, String prefix,
+        int srid, Hints hints, StringBuffer sql) {
+        delegate.encodeGeometryColumn(gatt, prefix, srid, hints, sql);
+    }
+
     @Override    
     public void encodeGeometryEnvelope(String tableName,String geometryColumn, StringBuffer sql) {
     	delegate.encodeGeometryEnvelope(tableName, geometryColumn, sql);
@@ -114,7 +132,7 @@ public class DB2SQLDialectBasic extends BasicSQLDialect {
 
     
     @Override
-    public void encodeGeometryValue(Geometry value, int srid, StringBuffer sql) throws IOException {
+    public void encodeGeometryValue(Geometry value, int dimension, int srid, StringBuffer sql) throws IOException {
     	DB2Util.encodeGeometryValue(value, srid, sql);
     }
     
@@ -211,6 +229,11 @@ public class DB2SQLDialectBasic extends BasicSQLDialect {
 
     public void setFunctionEncodingEnabled(boolean functionEncodingEnabled) {
         delegate.setFunctionEncodingEnabled(functionEncodingEnabled);
+    }
+
+    public List<ReferencedEnvelope> getOptimizedBounds(String schema, SimpleFeatureType featureType,
+            Connection cx) throws SQLException, IOException {
+        return delegate.getOptimizedBounds(schema, featureType, cx);
     }
 
 }

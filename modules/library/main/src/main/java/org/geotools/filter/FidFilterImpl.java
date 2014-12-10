@@ -28,7 +28,11 @@ import java.util.logging.Logger;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.filter.expression.PropertyAccessor;
 import org.geotools.filter.expression.SimpleFeaturePropertyAccessorFactory;
+import org.geotools.filter.identity.FeatureIdImpl;
+import org.opengis.filter.FilterFactory;
 import org.opengis.filter.FilterVisitor;
+import org.opengis.filter.Id;
+import org.opengis.filter.identity.FeatureId;
 import org.opengis.filter.identity.Identifier;
 
 /**
@@ -51,12 +55,13 @@ import org.opengis.filter.identity.Identifier;
  * @source $URL$
  * @version $Id$
  */
-public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
+public class FidFilterImpl extends AbstractFilter implements Id {
     /** Logger for the default core module. */
     private static final Logger LOGGER = org.geotools.util.logging.Logging.getLogger("org.geotools.core");
 
     /** List of the Identifer. */
-    private Set fids = new HashSet();
+    private Set<Identifier> fids = new HashSet<Identifier>();
+    private Set<String> ids = new HashSet<String>();
 
     /**
      * Empty constructor.
@@ -64,8 +69,6 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      * @deprecated use {@link #FidFilterImpl(Set)}
      */
     protected FidFilterImpl() {
-        super(CommonFactoryFinder.getFilterFactory(null));
-        filterType = AbstractFilter.FID;
     }
 
     /**
@@ -76,8 +79,6 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      * @deprecated use {@link #FidFilterImpl(Set)}
      */
     protected FidFilterImpl(String initialFid) {
-        super(CommonFactoryFinder.getFilterFactory(null));
-        filterType = AbstractFilter.FID;
         addFid(initialFid);
     }
 
@@ -87,8 +88,6 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      * 
      */
     protected FidFilterImpl(Set/* <Identifier> */fids) {
-        super(CommonFactoryFinder.getFilterFactory(null));
-        filterType = AbstractFilter.FID;
         // check these are really identifiers
         for (Iterator it = fids.iterator(); it.hasNext();) {
             Object next = it.next();
@@ -97,6 +96,9 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
                         + next.getClass() + " does not");
         }
         this.fids = fids;
+        for (Identifier identifier : this.fids) {
+            ids.add(identifier.getID().toString());
+        }
     }
 
     /**
@@ -113,6 +115,7 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
     /**
      * @see org.opengis.filter.Id#getIDs()
      */
+    @SuppressWarnings("unchecked")
     public Set getIDs() {
         return getFidsSet();
     }
@@ -120,7 +123,7 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
     /**
      * @see org.opengis.filter.Id#getIdentifiers()
      */
-    public Set getIdentifiers() {
+    public Set<Identifier> getIdentifiers() {
         return fids;
     }
 
@@ -137,7 +140,7 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      * 
      * @return the internally stored fids.
      */
-    public Set getFidsSet() {
+    public Set<String> getFidsSet() {
         return fids();
     }
 
@@ -146,14 +149,8 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      * 
      * @return
      */
-    private Set fids() {
-        Set set = new TreeSet();
-        for (Iterator i = fids.iterator(); i.hasNext();) {
-            Identifier id = (Identifier) i.next();
-            set.add(id.getID().toString());
-        }
-
-        return set;
+    private Set<String> fids() {
+        return new HashSet<String>(ids);
     }
 
     /**
@@ -165,7 +162,8 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      */
     public final void addFid(String fid) {
         LOGGER.finest("got fid: " + fid);
-        fids.add(factory.featureId(fid));
+        fids.add( new FeatureIdImpl(fid));
+        ids.add(fid);
     }
 
     /**
@@ -199,6 +197,7 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
             Identifier featureId = (Identifier) f.next();
             if (fid.equals(featureId.getID().toString())) {
                 f.remove();
+                ids.remove(fid);
             }
         }
 
@@ -236,16 +235,18 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
      * @see SimpleFeaturePropertyAccessorFactory
      */
     public boolean evaluate(Object feature) {
-            if (feature == null) {
-                return false;
-            }
-    
-            final Set fids = fids();
-		
-		
-            //NC - updated, using attributeexpressionimpl will be easiest, don't have to copy and paste lots of code				
-            Object evaluate = CommonFactoryFinder.getFilterFactory(null).property("@id").evaluate(feature);
-            return evaluate == null? false : fids.contains(evaluate);		
+        if (feature == null) {
+            return false;
+        }
+
+        //NC - updated, using attributeexpressionimpl will be easiest, don't have to copy and paste lots of code				
+        FilterFactory ff = CommonFactoryFinder.getFilterFactory(null);
+        String evaluate = ff.property("@id").evaluate(feature, String.class);
+        if(evaluate == null) {
+            return false;		
+        } else {
+            return ids.contains(evaluate);
+        }
 	}
 	
     /**
@@ -296,12 +297,14 @@ public class FidFilterImpl extends AbstractFilterImpl implements FidFilter {
         LOGGER.finest("condition: " + filter);
 
         if ((filter != null) && (filter.getClass() == this.getClass())) {
+            FidFilterImpl other = (FidFilterImpl) filter;
+            int filterType = Filters.getFilterType( other );
             if(LOGGER.isLoggable(Level.FINEST)) {
-                LOGGER.finest("condition: " + ((FidFilterImpl) filter).filterType);
+                LOGGER.finest("condition: " + filterType);
             }
 
-            if (((FidFilterImpl) filter).filterType == AbstractFilter.FID) {
-                return fids.equals(((FidFilterImpl) filter).fids);
+            if (filterType == AbstractFilter.FID) {
+                return fids.equals(other.fids);
             } else {
                 return false;
             }

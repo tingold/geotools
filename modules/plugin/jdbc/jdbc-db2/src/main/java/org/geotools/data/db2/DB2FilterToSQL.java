@@ -1,7 +1,8 @@
 /*
  *    GeoTools - The Open Source Java GIS Toolkit
  *    http://geotools.org
- *    (C) Copyright IBM Corporation, 2005-2007. All rights reserved.
+ *
+ *    (C) 2011-2012, Open Source Geospatial Foundation (OSGeo)
  *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
@@ -14,6 +15,7 @@
  *    Lesser General Public License for more details.
  *
  */
+
 package org.geotools.data.db2;
 
 import java.io.IOException;
@@ -314,7 +316,6 @@ public class DB2FilterToSQL extends PreparedFilterToSQL {
                 out.write("db2gse.ST_Equals");
             } else if (filter instanceof Disjoint) {
                 out.write("db2gse.ST_Disjoint");
-                // TODO
             } else if (filter instanceof Intersects || filter instanceof BBOX) {
                 out.write("db2gse.ST_Intersects");
             } else if (filter instanceof Crosses) {
@@ -629,4 +630,30 @@ public class DB2FilterToSQL extends PreparedFilterToSQL {
             throw new RuntimeException(e);
         }
     }
+    
+    public Object visit(BBOX filter, Object extraData) throws RuntimeException {
+        if (isLooseBBOXEnabled()==false)
+            return super.visit(filter,extraData);
+        
+                        
+        
+        double minx = filter.getMinX();
+        double maxx = filter.getMaxX();
+        double miny = filter.getMinY();
+        double maxy = filter.getMaxY();
+        String propertyName = filter.getPropertyName();
+        Integer srid =getSRID(propertyName);
+                
+        try {
+            out.write("db2gse.EnvelopesIntersect(");
+            out.write(escapeName(propertyName));
+            out.write(","+minx + ", " + miny + ", "
+                    + maxx + ", " + maxy + ", " + srid);
+            out.write(") =1 ");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return extraData;        
+    }
+
 }

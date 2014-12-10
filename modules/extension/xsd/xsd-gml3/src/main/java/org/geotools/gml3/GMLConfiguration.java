@@ -19,13 +19,17 @@ package org.geotools.gml3;
 import javax.xml.namespace.QName;
 
 import org.geotools.gml2.FeatureTypeCache;
+import org.geotools.gml2.SrsSyntax;
 import org.geotools.gml2.bindings.GMLCoordTypeBinding;
 import org.geotools.gml2.bindings.GMLCoordinatesTypeBinding;
 import org.geotools.gml3.bindings.AbstractFeatureCollectionTypeBinding;
 import org.geotools.gml3.bindings.AbstractFeatureTypeBinding;
 import org.geotools.gml3.bindings.AbstractGeometryTypeBinding;
 import org.geotools.gml3.bindings.AbstractRingPropertyTypeBinding;
+import org.geotools.gml3.bindings.ArcStringTypeBinding;
+import org.geotools.gml3.bindings.ArcTypeBinding;
 import org.geotools.gml3.bindings.BoundingShapeTypeBinding;
+import org.geotools.gml3.bindings.CircleTypeBinding;
 import org.geotools.gml3.bindings.ComplexSupportXSAnyTypeBinding;
 import org.geotools.gml3.bindings.CurveArrayPropertyTypeBinding;
 import org.geotools.gml3.bindings.CurvePropertyTypeBinding;
@@ -67,7 +71,9 @@ import org.geotools.gml3.bindings.PolygonPatchTypeBinding;
 import org.geotools.gml3.bindings.PolygonPropertyTypeBinding;
 import org.geotools.gml3.bindings.PolygonTypeBinding;
 import org.geotools.gml3.bindings.ReferenceTypeBinding;
+import org.geotools.gml3.bindings.RingTypeBinding;
 import org.geotools.gml3.bindings.SurfaceArrayPropertyTypeBinding;
+import org.geotools.gml3.bindings.SurfacePatchArrayPropertyTypeBinding;
 import org.geotools.gml3.bindings.SurfacePropertyTypeBinding;
 import org.geotools.gml3.bindings.SurfaceTypeBinding;
 import org.geotools.gml3.bindings.TimeInstantPropertyTypeBinding;
@@ -75,6 +81,7 @@ import org.geotools.gml3.bindings.TimeInstantTypeBinding;
 import org.geotools.gml3.bindings.TimePeriodTypeBinding;
 import org.geotools.gml3.bindings.TimePositionTypeBinding;
 import org.geotools.gml3.bindings.TimePositionUnionBinding;
+import org.geotools.gml3.bindings.ext.CompositeCurveTypeBinding;
 import org.geotools.gml3.smil.SMIL20Configuration;
 import org.geotools.gml3.smil.SMIL20LANGConfiguration;
 import org.geotools.xlink.XLINKConfiguration;
@@ -86,10 +93,6 @@ import org.picocontainer.MutablePicoContainer;
 import com.vividsolutions.jts.geom.CoordinateSequenceFactory;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.impl.CoordinateArraySequenceFactory;
-import org.geotools.gml3.bindings.ArcTypeBinding;
-import org.geotools.gml3.bindings.CircleTypeBinding;
-import org.geotools.gml3.bindings.RingTypeBinding;
-import org.geotools.gml3.bindings.SurfacePatchArrayPropertyTypeBinding;
 
 
 /**
@@ -116,10 +119,21 @@ public class GMLConfiguration extends Configuration {
     public static final QName ENCODE_FEATURE_MEMBER = org.geotools.gml2.GMLConfiguration.ENCODE_FEATURE_MEMBER;
 
     /**
+     * Boolean property which controls whether geometry and envelope objects are encoded with an 
+     * srs dimension attribute.
+     */
+    public static final QName NO_SRS_DIMENSION = new QName( "org.geotools.gml", "noSrsDimension" );
+
+    /**
      * extended support for arcs and surface flag
      */
     boolean extArcSurfaceSupport = false;
-    
+
+    /**
+     * Srs name style to encode srsName URI's with
+     */
+    protected SrsSyntax srsSyntax = SrsSyntax.OGC_URN_EXPERIMENTAL;
+
     public GMLConfiguration() {
         this(false);
     }
@@ -139,6 +153,23 @@ public class GMLConfiguration extends Configuration {
         //add parser properties
         getProperties().add(Parser.Properties.PARSE_UNKNOWN_ELEMENTS);
         getProperties().add(Parser.Properties.PARSE_UNKNOWN_ATTRIBUTES);
+    }
+
+    /**
+     * Sets the syntax to use for encoding srs uris.
+     * <p>
+     * If this method is not explicitly called {@link SrsSyntax#URN} is used as the default.
+     * </p>
+     */
+    public void setSrsSyntax(SrsSyntax srsSyntax) {
+        this.srsSyntax = srsSyntax;
+    }
+
+    /**
+     * Returns the syntax to use for encoding srs uris.
+     */
+    public SrsSyntax getSrsSyntax() {
+        return srsSyntax;
     }
 
     /**
@@ -247,24 +278,28 @@ public class GMLConfiguration extends Configuration {
         container.registerComponentImplementation(GML.TimePositionUnion, TimePositionUnionBinding.class);
         
         container.registerComponentImplementation(XS.ANYTYPE, ComplexSupportXSAnyTypeBinding.class);
+
+        container.registerComponentImplementation(GML.ArcStringType, ArcStringTypeBinding.class);
+        container.registerComponentImplementation(GML.ArcType, ArcTypeBinding.class);
+        container.registerComponentImplementation(GML.RingType, RingTypeBinding.class);
+        container.registerComponentImplementation(GML.CompositeCurveType,
+                CompositeCurveTypeBinding.class);
+        container.registerComponentImplementation(GML.CurveArrayPropertyType,
+                org.geotools.gml3.bindings.ext.CurveArrayPropertyTypeBinding.class);
+        container.registerComponentImplementation(GML.CurvePropertyType,
+                org.geotools.gml3.bindings.ext.CurvePropertyTypeBinding.class);
+        container.registerComponentImplementation(GML.CurveType,
+                org.geotools.gml3.bindings.ext.CurveTypeBinding.class);
+        container.registerComponentImplementation(GML.MultiCurveType,
+                org.geotools.gml3.bindings.ext.MultiCurveTypeBinding.class);
         
         //extended bindings for arc/surface support
         if (isExtendedArcSurfaceSupport()) {
-            container.registerComponentImplementation(GML.ArcType,
-                    ArcTypeBinding.class);
+
             container.registerComponentImplementation(GML.CircleType,
                     CircleTypeBinding.class);
-            container.registerComponentImplementation(GML.RingType, RingTypeBinding.class);
             container.registerComponentImplementation(GML.SurfacePatchArrayPropertyType,
                     SurfacePatchArrayPropertyTypeBinding.class);
-            container.registerComponentImplementation(GML.CurveArrayPropertyType, 
-                    org.geotools.gml3.bindings.ext.CurveArrayPropertyTypeBinding.class);
-            container.registerComponentImplementation(GML.CurvePropertyType, 
-                    org.geotools.gml3.bindings.ext.CurvePropertyTypeBinding.class);
-            container.registerComponentImplementation(GML.CurveType, 
-                    org.geotools.gml3.bindings.ext.CurveTypeBinding.class);
-            container.registerComponentImplementation(GML.MultiCurveType, 
-                    org.geotools.gml3.bindings.ext.MultiCurveTypeBinding.class);
             container.registerComponentImplementation(GML.MultiPolygonType, 
                     org.geotools.gml3.bindings.ext.MultiPolygonTypeBinding.class);
             container.registerComponentImplementation(GML.MultiSurfaceType, 
@@ -305,8 +340,8 @@ public class GMLConfiguration extends Configuration {
         
         container.registerComponentInstance(new GML3EncodingUtils());
         
-        if (isExtendedArcSurfaceSupport()) {
-            container.registerComponentInstance(new ArcParameters());
-        }
+        container.registerComponentInstance(new ArcParameters());
+
+        container.registerComponentInstance(srsSyntax);
     }
 }

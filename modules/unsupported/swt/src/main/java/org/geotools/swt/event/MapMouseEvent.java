@@ -36,8 +36,6 @@ import org.geotools.swt.SwtMapPane;
  * @source $URL$
  */
 public final class MapMouseEvent {
-    private static final long serialVersionUID = 3894658044662688321L;
-
     private DirectPosition2D geoCoords;
 
     private boolean isWheelEvent;
@@ -55,18 +53,16 @@ public final class MapMouseEvent {
      */
     public MapMouseEvent( SwtMapPane pane, MouseEvent event, boolean isWheel ) {
         this.event = event;
-
         isWheelEvent = isWheel;
         if (!isWheel) {
             wheelAmount = 0;
-
-            AffineTransform tr = pane.getScreenToWorldTransform();
-            geoCoords = new DirectPosition2D(event.x, event.y);
-            tr.transform(geoCoords, geoCoords);
-            geoCoords.setCoordinateReferenceSystem(pane.getMapContent().getCoordinateReferenceSystem());
         } else {
-            wheelAmount = 3;// event.getWheelRotation();
+            wheelAmount = event.count;
         }
+        AffineTransform tr = pane.getScreenToWorldTransform();
+        geoCoords = new DirectPosition2D(event.x, event.y);
+        tr.transform(geoCoords, geoCoords);
+        geoCoords.setCoordinateReferenceSystem(pane.getMapContent().getCoordinateReferenceSystem());
     }
 
     /**
@@ -94,6 +90,28 @@ public final class MapMouseEvent {
      */
     public Point getPoint() {
         return new Point(event.x, event.y);
+    }
+
+    /**
+     * The button that was pressed or released; 1 for the
+     * first button, 2 for the second button, and 3 for the
+     * third button, etc. On mouse dragging this function may
+     * return 0.
+     *
+     * @return the button that was pressed or released
+     * @see MouseEvent#button
+     */
+    public int getMouseButton() {
+        return event.button;
+    }
+
+    /**
+     * Returns the state mask of the mouse event.
+     * @return the state mask
+     * @see MouseEvent#stateMask
+     */
+    public int getStateMask() {
+    	return event.stateMask;
     }
 
     /**

@@ -8,7 +8,7 @@
   <parent>
     <groupId>org.geotools</groupId>
     <artifactId>unsupported</artifactId>
-    <version>8-SNAPSHOT</version>
+    <version>13-SNAPSHOT</version>
   </parent>
 
   <!-- =========================================================== -->
@@ -81,10 +81,16 @@
         <version>2.0</version>
     </dependency>
     <dependency>
-    	<groupId>commons-io</groupId>
-    	<artifactId>commons-io</artifactId>
-    	<type>jar</type>
-    	<scope>compile</scope>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <type>jar</type>
+        <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.geotools</groupId>
+      <artifactId>gt-cql</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 

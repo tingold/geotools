@@ -1,8 +1,24 @@
-/* Copyright (c) 2001 - 2007 TOPP - www.openplans.org. All rights reserved.
- * This code is licensed under the GPL 2.0 license, available at the root
- * application directory.
+/*
+ *    GeoTools - The Open Source Java GIS Toolkit
+ *    http://geotools.org
+ *
+ *    (C) 2011-2012, Open Source Geospatial Foundation (OSGeo)
+ *    (C) 2007 TOPP - www.openplans.org.
+ *
+ *    This library is free software; you can redistribute it and/or
+ *    modify it under the terms of the GNU Lesser General Public
+ *    License as published by the Free Software Foundation;
+ *    version 2.1 of the License.
+ *
+ *    This library is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *    Lesser General Public License for more details.
  */
 package org.geotools.process.raster;
+
+import java.util.Collection;
+import java.util.Iterator;
 
 import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.process.ProcessException;
@@ -74,4 +90,60 @@ public class BaseCoverageAlgebraProcess {
         }
     }
 
+    /**
+     * Utility method for ensuring that all the Input Coverages have the same CRS
+     * 
+     * @param coverages
+     * @throws ProcessException
+     */
+    public static void checkCompatibleCoveragesForMerge(Collection<GridCoverage2D> coverages) throws ProcessException {
+        if (coverages == null || coverages.isEmpty()){
+            throw new ProcessException(Errors.format(ErrorKeys.NULL_ARGUMENT_$1, "Input coverage List"));
+        }
+        
+        // 
+        // checking same CRS
+        // 
+        
+        // CRS which must be equal for all
+        CoordinateReferenceSystem crs = null;
+        
+        // Iterator on all the coverages
+        Iterator<GridCoverage2D> it = coverages.iterator();
+        
+        while(it.hasNext()){
+            // Selection of the coverage
+            GridCoverage2D coverage = it.next();
+            // Get the CRS associated
+            if(crs==null){
+                crs = coverage.getCoordinateReferenceSystem();
+            }else{
+                CoordinateReferenceSystem crs1 = coverage.getCoordinateReferenceSystem();
+                // Check that the CRS are the same
+                checkCompatibleCRS(crs,crs1);
+            }
+        }
+    }
+    
+    /**
+     * Utility method for checking if two CRS are equals
+     * 
+     * @param crsA
+     * @param crsB
+     */
+    public static void checkCompatibleCRS(CoordinateReferenceSystem crsA, CoordinateReferenceSystem crsB){
+        // check if they are equal
+        if (!CRS.equalsIgnoreMetadata(crsA, crsB)){
+            MathTransform mathTransform = null;
+            try {
+                mathTransform = CRS.findMathTransform(crsA, crsB);
+            } catch (FactoryException e) {
+                throw new ProcessException("Exceptions occurred while looking for a mathTransform between the coverage's CRSs", e );
+            }
+            // Check if their transformation is an identity
+            if (mathTransform != null && !mathTransform.isIdentity()){
+                throw new ProcessException(MISMATCHING_CRS_MESSAGE);
+            }
+        }
+    }
 }

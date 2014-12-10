@@ -16,7 +16,7 @@
   <parent>
     <groupId>org.geotools.xsd</groupId>
     <artifactId>xsd</artifactId>
-    <version>8-SNAPSHOT</version>
+    <version>13-SNAPSHOT</version>
   </parent>
   
 
@@ -130,26 +130,15 @@
       <plugin>
         <groupId>org.geotools.maven</groupId>
         <artifactId>xmlcodegen</artifactId>
+        <version>${project.version}</version>
         <configuration>
           <schemaLocation>filterCapabilities.xsd</schemaLocation>
-  	  <schemaSourceDirectory>${basedir}/src/main/resources/org/geotools/filter/v1_1/capabilities</schemaSourceDirectory>
+          <schemaSourceDirectory>${basedir}/src/main/resources/org/geotools/filter/v1_1/capabilities</schemaSourceDirectory>
           <destinationPackage>org.geotools.filter.v1_1.capabilities</destinationPackage>
           <generateConfiguration>false</generateConfiguration>
           <generateTests>true</generateTests>
         </configuration>
       </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>cobertura-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>clean</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-
       <plugin>
        <artifactId>maven-jar-plugin</artifactId>
        <executions>
@@ -161,7 +150,6 @@
         </execution>
        </executions>
       </plugin>
-
     </plugins>
   </build>
 

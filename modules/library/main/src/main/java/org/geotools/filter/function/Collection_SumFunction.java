@@ -29,13 +29,11 @@ import java.util.logging.Logger;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.feature.visitor.CalcResult;
 import org.geotools.feature.visitor.SumVisitor;
-import org.geotools.filter.Expression;
 import org.geotools.filter.FunctionExpressionImpl;
 import org.geotools.filter.IllegalFilterException;
 import org.geotools.filter.capability.FunctionNameImpl;
 import org.opengis.filter.capability.FunctionName;
-
-
+import org.opengis.filter.expression.Expression;
 /**
  * Calculates the sum value of an attribute for a given FeatureCollection
  * and Expression.
@@ -55,8 +53,8 @@ public class Collection_SumFunction extends FunctionExpressionImpl {
 
     //public static FunctionName NAME = new FunctionNameImpl("Collection_Sum","expression");
     public static FunctionName NAME = new FunctionNameImpl("Collection_Sum",
-            parameter("sum", Object.class),
-            parameter("expression", Object.class));
+            parameter("sum", Number.class),
+            parameter("expression", Number.class));
 
     /**
      * Creates a new instance of Collection_SumFunction

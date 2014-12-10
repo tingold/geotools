@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 import org.geotools.data.DataSourceException;
@@ -57,6 +58,7 @@ import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.filter.Filter;
 import org.opengis.filter.FilterFactory;
 import org.opengis.filter.PropertyIsEqualTo;
+import org.opengis.filter.expression.Expression;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 import com.vividsolutions.jts.geom.Geometry;
@@ -233,7 +235,7 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
         FilterFactory factory = CommonFactoryFinder.getFilterFactory(null);
         FilterFunction_geometryType geomTypeExpr = new FilterFunction_geometryType();
 
-        geomTypeExpr.setParameters(Collections.singletonList(factory.property(aname("geom"))));
+        geomTypeExpr.setParameters( (List) Collections.singletonList(factory.property(aname("geom"))));
 
         PropertyIsEqualTo filter = factory.equals(geomTypeExpr, factory.literal("Polygon"));
         reader = dataStore.getFeatureReader(new DefaultQuery(tname("road"), filter), t);
@@ -256,12 +258,12 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 
         FilterFactory factory = CommonFactoryFinder.getFilterFactory(null);
         FilterFunction_geometryType geomTypeExpr = new FilterFunction_geometryType();
-        geomTypeExpr.setParameters(Collections.singletonList(factory.property(aname("geom"))));
+        geomTypeExpr.setParameters((List)Collections.singletonList(factory.property(aname("geom"))));
 
         PropertyIsEqualTo filter = factory.equals(geomTypeExpr, factory.literal("Polygon"));
 
         DefaultQuery query = new DefaultQuery(tname("road"), filter);
-        query.setPropertyNames(Collections.singletonList(aname("id")));
+        query.setPropertyNames((List)Collections.singletonList(aname("id")));
 
          FeatureReader<SimpleFeatureType, SimpleFeature> reader = dataStore.getFeatureReader(query, t);
         // if the above statement didn't throw an exception, we're content
@@ -312,7 +314,7 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 
         FilterFactory ff = CommonFactoryFinder.getFilterFactory(null);
         FilterFunction_ceil ceil = new FilterFunction_ceil();
-        ceil.setParameters(Collections.singletonList(ff.property(aname("flow"))));
+        ceil.setParameters((List)Collections.singletonList(ff.property(aname("flow"))));
 
         PropertyIsEqualTo f = ff.equals(ceil, ff.literal(5));
 
@@ -1018,9 +1020,12 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 
         SimpleFeatureCollection results = road.getFeatures(td.rd1Filter);
         SimpleFeatureIterator features = results.features();
-        assertTrue(features.hasNext());
-        assertEquals(5, ((Number)features.next().getAttribute(aname("id"))).intValue());
-        results.close(features);
+        try {
+            assertTrue(features.hasNext());
+            assertEquals(5, ((Number) features.next().getAttribute(aname("id"))).intValue());
+        } finally {
+            features.close();
+        }
     }
 
     public void testGetFeatureStoreModifyFeatures2() throws IOException {
@@ -1038,9 +1043,12 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 
         SimpleFeatureCollection results = road.getFeatures(td.rd1Filter);
         SimpleFeatureIterator features = results.features();
-        assertTrue(features.hasNext());
-        assertEquals("changed", features.next().getAttribute(aname("name")));
-        results.close(features);
+        try {
+            assertTrue(features.hasNext());
+            assertEquals("changed", features.next().getAttribute(aname("name")));
+        } finally {
+            features.close();
+        }
     }
 
     /**
@@ -1651,12 +1659,15 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 			return;
 		
 		SimpleFeatureCollection fColl = fs.getFeatures();
-		SimpleFeatureIterator iterator =fColl.features();
-		Geometry original = null;
-		if (iterator.hasNext())
-			 original = (Geometry) iterator.next().getDefaultGeometry();
-		fColl.close(iterator);
-		
+                SimpleFeatureIterator iterator = fColl.features();
+                Geometry original = null;
+                try {
+                    if (iterator.hasNext()) {
+                        original = (Geometry) iterator.next().getDefaultGeometry();
+                    }
+                } finally {
+                    iterator.close();
+                }
 		double width = original.getEnvelope().getEnvelopeInternal().getWidth();
 		
 	    DefaultQuery query = new DefaultQuery();
@@ -1665,11 +1676,14 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 	    
 	    Geometry generalized = null;    	
 	    fColl = fs.getFeatures(query);
-		iterator =fColl.features();    	
-		if (iterator.hasNext())
-			 generalized = (Geometry) iterator.next().getDefaultGeometry();
-		fColl.close(iterator);
-	    
+            iterator = fColl.features();
+            try {
+                if (iterator.hasNext()) {
+                    generalized = (Geometry) iterator.next().getDefaultGeometry();
+                }
+            } finally {
+                iterator.close();
+            }  
 	    assertTrue(original.getNumPoints()>=generalized.getNumPoints());
 	}
 
@@ -1680,25 +1694,30 @@ public abstract class JDBCDataStoreAPITest extends JDBCTestSupport {
 			return;
 		
 		SimpleFeatureCollection fColl = fs.getFeatures();
-		SimpleFeatureIterator iterator =fColl.features();
-		Geometry original = null;
-		if (iterator.hasNext())
-			 original = (Geometry) iterator.next().getDefaultGeometry();
-		fColl.close(iterator);
-		
+                SimpleFeatureIterator iterator = fColl.features();
+                Geometry original = null;
+                try {
+                    if (iterator.hasNext()) {
+                        original = (Geometry) iterator.next().getDefaultGeometry();
+                    }
+                } finally {
+                    iterator.close();
+                }		
 		double width = original.getEnvelope().getEnvelopeInternal().getWidth();
 		
-	    DefaultQuery query = new DefaultQuery();
+	    Query query = new Query();
 	    Hints hints = new Hints(Hints.GEOMETRY_SIMPLIFICATION,width/2);        
 	    query.setHints(hints);        
 	    
 	    Geometry simplified = null;    	
 	    fColl = fs.getFeatures(query);
-		iterator =fColl.features();    	
-		if (iterator.hasNext())
-			 simplified = (Geometry) iterator.next().getDefaultGeometry();
-		fColl.close(iterator);
-	    
+            iterator = fColl.features();
+            try {
+                if (iterator.hasNext())
+                    simplified = (Geometry) iterator.next().getDefaultGeometry();
+            } finally {
+                iterator.close();
+            }    
 	    assertTrue(original.getNumPoints()>=simplified.getNumPoints());
 	}
 }

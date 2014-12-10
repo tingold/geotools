@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Properties;
 
@@ -11,13 +12,16 @@ import org.geotools.data.AttributeReader;
 import org.geotools.data.DataSourceException;
 import org.geotools.data.DataUtilities;
 import org.geotools.feature.SchemaException;
+import org.geotools.geometry.jts.WKTReader2;
 import org.geotools.util.Converters;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
+import org.opengis.feature.type.GeometryDescriptor;
 import org.opengis.feature.type.GeometryType;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.io.ParseException;
 
 /**
  * Simple AttributeReader that works against Java properties files.
@@ -48,17 +52,24 @@ import com.vividsolutions.jts.geom.Geometry;
  * </p>
  * 
  * <pre>
- *  <code>
- *  fid4=4||<null> -> Feature( id=2, name="", geom=null )
- *  </code>
+ *  fid4=4||<null>
+ * </pre>
+ * <p>
+ * You can use \ to escape a | character, you can also use it to protect newlines::
+ * <pre>
+ * fid4=4|I have a \\|splitting\\| headache|POINT(0,0)
+ * fid5=5|Example of \nmulti-lin text|POINT(1,1)
+ * fid6=6|Second \\
+ * example of multi-line text|POINT(2,2)
  * </pre>
  * 
  * @author Jody Garnett
  *
- *
  * @source $URL$
  */
 public class PropertyAttributeReader implements AttributeReader {
+	WKTReader2 wktReader = new WKTReader2();
+	
     BufferedReader reader;
 
     SimpleFeatureType type;
@@ -176,6 +187,13 @@ public class PropertyAttributeReader implements AttributeReader {
         next = readLine();
         return next != null;
     }
+    /**
+     * Read the next line of content, paying careful attention to skip comments and for correct
+     * handling of lines that end with escaped line-feeds to span multi lines in the text file.
+     * 
+     * @return
+     * @throws IOException
+     */
     String readLine() throws IOException {
         StringBuilder buffer = new StringBuilder();
         while( true ){
@@ -183,10 +201,14 @@ public class PropertyAttributeReader implements AttributeReader {
             if( txt == null ){
                 break;
             }
+            // skip comments
             if( txt.startsWith("#") || txt.startsWith("!")){
-                continue; // skip content
+                continue;
             }
+            // ignore leading white space
             txt = trimLeft( txt );
+            
+            // handle escaped line feeds used to span multiple lines
             if( txt.endsWith("\\")){
                 buffer.append(txt.substring(0,txt.length()-1) );
                 buffer.append("\n");
@@ -201,13 +223,28 @@ public class PropertyAttributeReader implements AttributeReader {
             return null; // there is no line
         }
         String raw = buffer.toString();
-        raw = raw.replace("\\n", "\n" );
-        raw = raw.replace("\\r", "\r" );
-        raw = raw.replace("\\t", "\t" );
         return raw;
     }
     /**
-     * Trim leading white space as described Properties.
+     * Used to decode common whitespace chracters and escaped | characters.
+     * 
+     * @param txt Origional raw text as stored
+     * @return decoded text as provided for storage
+     * @see PropertyAttributeWriter#encodeString(String)
+     */
+    String decodeString( String txt ){
+        // unpack whitespace constants
+        txt = txt.replace( "\\n", "\n");
+        txt = txt.replaceAll("\\r", "\r" );
+
+        // unpack our our escaped characters
+        txt = txt.replace("\\|", "|" );
+        // txt = txt.replace("\\\\", "\\" );
+        
+        return txt;
+    }
+    /**
+     * Trim leading white space as described Properties file standard.
      * @see Properties#load(java.io.Reader)
      * @param txt
      * @return txt leading whitespace removed
@@ -241,13 +278,60 @@ public class PropertyAttributeReader implements AttributeReader {
 
             int split = line.indexOf('=');
             fid = line.substring(0, split);
-            text = line.substring(split + 1).split("\\|", -1);//use -1 as limit to include empty trailing spaces
-            if (type.getAttributeCount() != text.length)
-                throw new DataSourceException("format error: expected " + type.getAttributeCount()
-                        + " attributes, but found " + text.length + ". [" + line + "]");
+            String data = line.substring(split+1);
+            
+            text = splitIntoText(data);
         } else {
             throw new NoSuchElementException();
         }
+    }
+    /**
+     * Split the provided text using | charater as a seperator.
+     * <p>
+     * This method respects the used of \ to "escape" a | character allowing
+     * representations such as the following:<pre>
+     * String example="text|example of escaped \\| character|text";
+     * 
+     * // represents: "text|example of escaped \| character|text"
+     * String split=splitIntoText( example );</pre>
+     * 
+     * @param data Origional raw text as stored
+     * @return data split using | as seperator
+     * @throws DataSourceException if the information stored is inconsistent with the headered provided
+     */
+    private String[] splitIntoText(String data) throws DataSourceException {
+        // return data.split("|", -1); // use -1 as a limit to include empty trailing spaces
+        // return data.split("[.-^\\\\]\\|",-1); //use -1 as limit to include empty trailing spaces
+
+        String split[] = new String[type.getAttributeCount()];
+        int i = 0;
+        StringBuilder item = new StringBuilder();
+        for (String str : data.split("\\|",-1)) {
+            if (i == type.getAttributeCount()) {
+                // limit reached
+                throw new DataSourceException("format error: expected " + split.length
+                        + " attributes, stopped after finding " + i + ". [" + data
+                        + "] split into " + Arrays.asList(split));
+            }
+            if (str.endsWith("\\")) {
+//                String shorter = str.substring(0, str.length() - 1);
+//                item.append(shorter);
+                item.append(str);
+                item.append("|");
+            } else {
+                item.append(str);
+                split[i] = item.toString();
+
+                i++;
+                item = new StringBuilder();
+            }
+        }
+        if (i < type.getAttributeCount()) {
+            throw new DataSourceException("format error: expected " + type.getAttributeCount()
+                    + " attributes, but only found " + i + ". [" + data + "] split into "
+                    + Arrays.asList(split));
+        }
+        return split;
     }
 
     /**
@@ -281,18 +365,18 @@ public class PropertyAttributeReader implements AttributeReader {
         AttributeDescriptor attType = type.getDescriptor(index);
 
         String stringValue = null;
-        boolean isEmpty = "".equals(stringValue);
+        //boolean isEmpty = "".equals(stringValue);
         try {
-            // read the value
-            stringValue = text[index];
-        } catch (RuntimeException e1) {
-            e1.printStackTrace();
+            // read the value and decode any interesting characters
+            stringValue = decodeString( text[index] );
+        } catch (RuntimeException huh) {
+            huh.printStackTrace();
             stringValue = null;
         }
         // check for special <null> flag
         if ("<null>".equals(stringValue)) {
             stringValue = null;
-            isEmpty = true;
+        //    isEmpty = true;
         }
         if (stringValue == null) {
             if (attType.isNillable()) {
@@ -300,8 +384,19 @@ public class PropertyAttributeReader implements AttributeReader {
             }
         }
         // Use of Converters to convert from String to requested java binding
-        Object value = Converters.convert(stringValue, attType.getType().getBinding());
-
+        Object value = null;
+        if(attType instanceof GeometryDescriptor && stringValue != null && !stringValue.trim().isEmpty()) {
+        	try {
+				Geometry geometry = wktReader.read(stringValue.trim());
+				value = Converters.convert(geometry, attType.getType().getBinding());
+			} catch (ParseException e) {
+			    // to be consistent with converters
+				value = null;
+			}
+        } else {
+        	value = Converters.convert(stringValue, attType.getType().getBinding());
+        }
+        	
         if (attType.getType() instanceof GeometryType) {
             // this is to be passed on in the geometry objects so the srs name gets encoded
             CoordinateReferenceSystem crs = ((GeometryType) attType.getType())
@@ -315,4 +410,8 @@ public class PropertyAttributeReader implements AttributeReader {
         }
         return value;
     }
+
+	void setWKTReader(WKTReader2 wktReader) {
+		this.wktReader = wktReader;
+	}
 }

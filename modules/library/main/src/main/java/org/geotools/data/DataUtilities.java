@@ -16,7 +16,9 @@
  */
 package org.geotools.data;
 
+import java.io.Closeable;
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -62,14 +65,17 @@ import org.geotools.data.simple.SimpleFeatureStore;
 import org.geotools.data.store.ArrayDataStore;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.factory.Hints;
+import org.geotools.feature.AttributeImpl;
 import org.geotools.feature.AttributeTypeBuilder;
 import org.geotools.feature.DefaultFeatureCollection;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureCollections;
 import org.geotools.feature.FeatureIterator;
 import org.geotools.feature.FeatureTypes;
+import org.geotools.feature.GeometryAttributeImpl;
 import org.geotools.feature.NameImpl;
 import org.geotools.feature.SchemaException;
+import org.geotools.feature.collection.BridgeIterator;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.feature.type.AttributeDescriptorImpl;
@@ -79,16 +85,20 @@ import org.geotools.feature.type.GeometryTypeImpl;
 import org.geotools.filter.FilterAttributeExtractor;
 import org.geotools.filter.visitor.PropertyNameResolvingVisitor;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.geometry.jts.WKTReader2;
 import org.geotools.metadata.iso.citation.Citations;
 import org.geotools.referencing.CRS;
 import org.geotools.resources.i18n.ErrorKeys;
 import org.geotools.resources.i18n.Errors;
 import org.geotools.util.Converters;
+import org.geotools.util.NullProgressListener;
 import org.geotools.util.Utilities;
 import org.opengis.coverage.grid.GridCoverage;
 import org.opengis.feature.Feature;
+import org.opengis.feature.FeatureFactory;
 import org.opengis.feature.FeatureVisitor;
 import org.opengis.feature.IllegalAttributeException;
+import org.opengis.feature.Property;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
@@ -103,8 +113,12 @@ import org.opengis.filter.FilterFactory2;
 import org.opengis.filter.expression.Expression;
 import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.sort.SortBy;
+import org.opengis.geometry.BoundingBox;
+import org.opengis.metadata.citation.Citation;
+import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.ReferenceIdentifier;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.util.ProgressListener;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
@@ -121,25 +135,71 @@ import com.vividsolutions.jts.geom.Polygon;
 import org.geotools.data.view.DefaultView;
 
 /**
- * Utility functions for use when implementing working with data classes.
+ * Utility functions for use with GeoTools with data classes.
  * <p>
- * TODO: Move FeatureType manipulation to feature package
+ * These methods fall into several categories:
+ * <p>
+ * Conversion between common data structures.
+ * <ul>
+ * <li>{@link #collection} methods: creating/converting a {@link SimpleFeatureCollection} from a range of input.</li>
+ * <li>{@link #simple} methods: adapting from generic Feature use to SimpleFeature. Used to convert to SimpleFeature,
+ * SimpleFeatureCollection,SimpleFeatureSource</li>
+ * <li>{@link #list} to quickly copy features into a memory based list</li>
+ * <li>{@link #reader} methods to convert to FeatureReader</li>
+ * <li>{@link #expression} setup a FeatureSource wrapper around the provided data</li>
+ * </ul>
  * </p>
+ * <p>
+ * SimpleFeatureType and SimpleFeature encoding/decoding from String as used by the PropertyDataStore tutorials.
+ * <ul>
+ * <li>{@link #createType} methods: to create a SimpleFeatureType from a one line text string</li>
+ * <li>{@link #encodeType}: text string representation of a SimpleFeaturerType</li>
+ * <li>{@link #createFeature}: create a SimpleFeature from a one line text String</li>
+ * <li>{@link #encodeFeature}: encode a feature as a single line text string</li>
+ * </ul>
+ * </p>
+ * <p>
+ * Working with SimpleFeatureType (this class is immutable so we always have to make a modified copy):
+ * <ul>
+ * <li>{@link #createSubType(SimpleFeatureType, String[])} methods return a modified copy of an origional feature type. Used to cut down an exsiting
+ * feature type to reflect only the attributes requested when using {@link SimpleFeatureSource#getFeatures(Filter)}.</li>
+ * <li>{@link #compare} and {@link #isMatch(AttributeDescriptor, AttributeDescriptor)} are used to check for types compatible with
+ * {@link #createSubType} used to verify that feature values can be copied across</li>
+ * </ul>
+ * </p>
+ * <p>
+ * Manipulating individual features and data values:
+ * <ul>
+ * <li>{@link #reType} generates a cut down version of an original feature in the same manners as {@link #createSubType}</li>
+ * <li>{@link #template} and {@link #defaultValue} methods which uses {@link AttributeDescriptor#getDefaultValue()} when creating new empty features</li>
+ * <li>{@link #duplicate(Object)} used for deep copy of feature data</li>
+ * <li>
+ * </ul>
+ * </p>
+ * And a grab bag of helpful utility methods for those implementing a DataStore:
+ * <ul>
+ * <li>{@link #urlToFile(URL)} and {@link #fileToURL(File)} and {@link #getParentUrl(URL)} used to work with files across platforms</li>
+ * <li>{@link #includeFilters} and {@link #excludeFilters} work as a compound {@link FileFilter} making {@link File#listFiles} easier to use</li>
+ * <li>{@link #propertyNames}, {@link #fidSet}, {@link #attributeNames} methods are used to double check a provided query and ensure
+ * it can be correctly handed.</li>
+ * </li>{@link #sortComparator}, {@link #resolvePropertyNames} and {@link #mixQueries} are used to prep a {@link Query} prior to use</li>
+ * </ul>
  * 
  * @author Jody Garnett, Refractions Research
- *
- *
- * @source $URL$
- *         http://svn.osgeo.org/geotools/trunk/modules/library/main/src/main/java/org/geotools/
- *         data/DataUtilities.java $
+ * 
+ * 
+ * @source $URL$ http://svn.osgeo.org/geotools/trunk/modules/library/main/src/main/java/org/geotools/ data/DataUtilities.java $
  */
 public class DataUtilities {
-
+    /** Typemap used by {@link #createType(String, String)} methods */
     static Map<String, Class> typeMap = new HashMap<String, Class>();
-
+    
+    /** Reverse type map used by {@link #encodeType(FeatureType)} */
     static Map<Class, String> typeEncode = new HashMap<Class, String>();
 
-    static FilterFactory2 ff = CommonFactoryFinder.getFilterFactory2(null);
+    static FilterFactory2 ff = CommonFactoryFinder.getFilterFactory2();
+    
+    static final boolean IS_WINDOWS_OS;
 
     static {
         typeEncode.put(String.class, "String");
@@ -167,6 +227,9 @@ public class DataUtilities {
         typeMap.put("true", Boolean.class);
         typeMap.put("false", Boolean.class);
 
+        typeEncode.put(UUID.class, "UUID");
+        typeMap.put("UUID", UUID.class);
+
         typeEncode.put(Geometry.class, "Geometry");
         typeMap.put("Geometry", Geometry.class);
 
@@ -193,8 +256,12 @@ public class DataUtilities {
 
         typeEncode.put(Date.class, "Date");
         typeMap.put("Date", Date.class);
+        
+        // check if we are running on windows
+        String os = System.getProperty("os.name");
+        IS_WINDOWS_OS = os.toUpperCase().contains("WINDOWS");
     }
-
+    
     /**
      * Retrieve the attributeNames defined by the featureType
      * 
@@ -283,9 +350,8 @@ public class DataUtilities {
 
         String simplePrefix = "file:/";
         String standardPrefix = "file://";
-        String os = System.getProperty("os.name");
 
-        if (os.toUpperCase().contains("WINDOWS") && string.startsWith(standardPrefix)) {
+        if (IS_WINDOWS_OS && string.startsWith(standardPrefix)) {
             // win32: host/share reference
             path3 = string.substring(standardPrefix.length() - 2);
         } else if (string.startsWith(standardPrefix)) {
@@ -403,10 +469,9 @@ public class DataUtilities {
     }
 
     /**
-     * Compare operation for FeatureType.
-     * 
+     * Compare attribute coverage between two feature types (allowing the identification of subTypes).
      * <p>
-     * Results in:
+     * The comparison results in a number with the following meaning:
      * </p>
      * 
      * <ul>
@@ -419,20 +484,20 @@ public class DataUtilities {
      * </ul>
      * 
      * <p>
-     * Comparison is based on AttributeTypes, an IOException is thrown if the AttributeTypes are not
-     * compatiable.
+     * Comparison is based on {@link AttributeDescriptor} - the {@link #isMatch(AttributeDescriptor, AttributeDescriptor)}
+     * method is used to quickly confirm that the local name and java binding are compatible.
      * </p>
      * 
      * <p>
      * Namespace is not considered in this opperations. You may still need to reType to get the
      * correct namesapce, or reorder.
      * </p>
+     * <p>
+     * Please note this method will not result in a stable sort if used in a {@link Comparator}
+     * as -1 is used to indicate incompatiblity (rather than simply "before").
      * 
-     * @param typeA
-     *            FeatureType beind compared
-     * @param typeB
-     *            FeatureType being compared against
-     * 
+     * @param typeA  FeatureType beind compared
+     * @param typeB FeatureType being compared against
      */
     public static int compare(SimpleFeatureType typeA, SimpleFeatureType typeB) {
         if (typeA == typeB) {
@@ -454,12 +519,8 @@ public class DataUtilities {
             return -1;
         }
 
-        // may still be the same featureType
-        // (Perhaps they differ on namespace?)
+        // may still be the same featureType (Perhaps they differ on namespace?)
         AttributeDescriptor a;
-
-        // may still be the same featureType
-        // (Perhaps they differ on namespace?)
         int match = 0;
 
         for (int i = 0; i < countA; i++) {
@@ -478,17 +539,6 @@ public class DataUtilities {
         if ((countA == countB) && (match == countA)) {
             // all attributes in typeA agreed with typeB
             // (same order and type)
-            // if (typeA.getNamespace() == null) {
-            // if(typeB.getNamespace() == null) {
-            // return 0;
-            // } else {
-            // return 1;
-            // }
-            // } else if(typeA.getNamespace().equals(typeB.getNamespace())) {
-            // return 0;
-            // } else {
-            // return 1;
-            // }
             return 0;
         }
 
@@ -614,6 +664,15 @@ public class DataUtilities {
 
     /**
      * Performs a deep copy of the provided object.
+     * <p>
+     * A number of tricks are used to make this as fast as possible:
+     * <ul>
+     * <li>Simple or Immutable types are copied as is (String, Integer, Float, URL, etc..)</li>
+     * <li>JTS Geometry objects are cloned</li>
+     * <li>Arrays and the Collection classes are duplicated element by element</li>
+     * </ul>
+     * This function is used recusively for (in order to handle complext features) no attempt
+     * is made to detect cycles at this time so your milage may vary.
      * 
      * @param src
      *            Source object
@@ -739,9 +798,6 @@ public class DataUtilities {
      *            Type of feature we wish to create
      * 
      * @return A new Feature of type featureType
-     * 
-     * @throws IllegalAttributeException
-     *             if we could not create featureType instance with acceptable default values
      */
     public static SimpleFeature template(SimpleFeatureType featureType)
             throws IllegalAttributeException {
@@ -749,20 +805,16 @@ public class DataUtilities {
     }
 
     /**
-     * DOCUMENT ME!
+     * Use the provided featureType to create an empty feature.
+     * <p>
+     * The {@link #defaultValues(SimpleFeatureType)} method is used to generate
+     * the intial values (making use of {@link AttributeDescriptor#getDefaultValue()} as required.
      * 
      * @param featureType
-     *            DOCUMENT ME!
      * @param featureID
-     *            DOCUMENT ME!
-     * 
-     * @return DOCUMENT ME!
-     * 
-     * @throws IllegalAttributeException
-     *             DOCUMENT ME!
+     * @return Craeted feature
      */
-    public static SimpleFeature template(SimpleFeatureType featureType, String featureID)
-            throws IllegalAttributeException {
+    public static SimpleFeature template(SimpleFeatureType featureType, String featureID) {
         return SimpleFeatureBuilder.build(featureType, defaultValues(featureType), featureID);
     }
 
@@ -771,11 +823,8 @@ public class DataUtilities {
      * 
      * @param featureType
      * @return Array of values, that are good starting point for data entry
-     * 
-     * @throws IllegalAttributeException
      */
-    public static Object[] defaultValues(SimpleFeatureType featureType)
-            throws IllegalAttributeException {
+    public static Object[] defaultValues(SimpleFeatureType featureType) {
         return defaultValues(featureType, null);
     }
 
@@ -784,16 +833,12 @@ public class DataUtilities {
      * provided.
      * 
      * @param featureType
-     * @param atts
-     *            provided attributes
-     * 
+     * @param providedValues
      * @return newly created feature
-     * 
-     * @throws IllegalAttributeException
+     * @throws ArrayIndexOutOfBoundsException  If the number of provided values does not match the featureType
      */
-    public static SimpleFeature template(SimpleFeatureType featureType, Object[] atts)
-            throws IllegalAttributeException {
-        return SimpleFeatureBuilder.build(featureType, defaultValues(featureType, atts), null);
+    public static SimpleFeature template(SimpleFeatureType featureType, Object[] providedValues) {
+        return SimpleFeatureBuilder.build(featureType, defaultValues(featureType, providedValues), null);
     }
 
     /**
@@ -802,16 +847,15 @@ public class DataUtilities {
      * 
      * @param featureType
      * @param featureID
-     * @param atts
-     *            provided attributes
+     * @param providedValues provided attributes
      * 
      * @return newly created feature
      * 
-     * @throws IllegalAttributeException
+     * @throws ArrayIndexOutOfBoundsException  If the number of provided values does not match the featureType
      */
     public static SimpleFeature template(SimpleFeatureType featureType, String featureID,
-            Object[] atts) throws IllegalAttributeException {
-        return SimpleFeatureBuilder.build(featureType, defaultValues(featureType, atts), featureID);
+            Object[] providedValues) {
+        return SimpleFeatureBuilder.build(featureType, defaultValues(featureType, providedValues), featureID);
     }
 
     /**
@@ -821,12 +865,9 @@ public class DataUtilities {
      * @param values
      * 
      * @return set of default values
-     * 
-     * @throws IllegalAttributeException
-     * @throws ArrayIndexOutOfBoundsException
+     * @throws ArrayIndexOutOfBoundsException  If the number of provided values does not match the featureType
      */
-    public static Object[] defaultValues(SimpleFeatureType featureType, Object[] values)
-            throws IllegalAttributeException {
+    public static Object[] defaultValues(SimpleFeatureType featureType, Object[] values) {
         if (values == null) {
             values = new Object[featureType.getAttributeCount()];
         } else if (values.length != featureType.getAttributeCount()) {
@@ -834,7 +875,8 @@ public class DataUtilities {
         }
 
         for (int i = 0; i < featureType.getAttributeCount(); i++) {
-            values[i] = defaultValue(featureType.getDescriptor(i));
+            AttributeDescriptor descriptor = featureType.getDescriptor(i);
+            values[i] = descriptor.getDefaultValue();
         }
 
         return values;
@@ -842,18 +884,14 @@ public class DataUtilities {
 
     /**
      * Provides a defautlValue for attributeType.
-     * 
      * <p>
      * Will return null if attributeType isNillable(), or attempt to use Reflection, or
      * attributeType.parse( null )
      * </p>
      * 
      * @param attributeType
-     * 
      * @return null for nillable attributeType, attempt at reflection
-     * 
-     * @throws IllegalAttributeException
-     *             If value cannot be constructed for attribtueType
+     * @deprecated Please {@link AttributeDescriptor#getDefaultValue()}
      */
     public static Object defaultValue(AttributeDescriptor attributeType)
             throws IllegalAttributeException {
@@ -861,7 +899,6 @@ public class DataUtilities {
 
         if (value == null && !attributeType.isNillable()) {
             return null; // sometimes there is no valid default value :-(
-            // throw new IllegalAttributeException("Got null default value for non-null type.");
         }
         return value;
     }
@@ -872,8 +909,20 @@ public class DataUtilities {
      * <ul>
      * <li>String</li>
      * <li>Object - will return empty string</li>
-     * <li>Number</li>
+     * <li>Integer</li>
+     * <li>Double</li>
+     * <li>Long</li>
+     * <li>Short</li>
+     * <li>Float</li>
+     * <li>BigDecimal</li>
+     * <li>BigInteger</li>
      * <li>Character</li>
+     * <li>Boolean</li> 
+     * <li>UUID</li>
+     * <li>Timestamp</li>
+     * <li>java.sql.Date</li>
+     * <li>java.sql.Time</li>
+     * <li>java.util.Date</li> 
      * <li>JTS Geometries</li>
      * </ul>
      * 
@@ -912,14 +961,17 @@ public class DataUtilities {
         if (type == Boolean.class) {
             return Boolean.FALSE;
         }
+        if (type == UUID.class) {
+            return UUID.fromString("00000000-0000-0000-0000-000000000000");
+        }        
         if (type == Timestamp.class)
-            return new Timestamp(System.currentTimeMillis());
+            return new Timestamp(0);
         if (type == java.sql.Date.class)
-            return new java.sql.Date(System.currentTimeMillis());
+            return new java.sql.Date(0);
         if (type == java.sql.Time.class)
-            return new java.sql.Time(System.currentTimeMillis());
+            return new java.sql.Time(0);
         if (type == java.util.Date.class)
-            return new java.util.Date();
+            return new java.util.Date(0);
 
         GeometryFactory fac = new GeometryFactory();
         Coordinate coordinate = new Coordinate(0, 0);
@@ -931,17 +983,17 @@ public class DataUtilities {
         if (type == MultiPoint.class) {
             return fac.createMultiPoint(new Point[] { point });
         }
+        LineString lineString = fac.createLineString(new Coordinate[] { new Coordinate(0, 0), new Coordinate(0, 1) });
         if (type == LineString.class) {
-            return fac.createLineString(new Coordinate[] { coordinate, coordinate, coordinate,
-                    coordinate });
+            return lineString;
         }
-        LinearRing linearRing = fac.createLinearRing(new Coordinate[] { coordinate, coordinate,
-                coordinate, coordinate });
+        LinearRing linearRing = fac.createLinearRing(new Coordinate[] { new Coordinate(0, 0), new Coordinate(0, 1),
+                new Coordinate(1, 1), new Coordinate(1, 0), new Coordinate(0, 0)});
         if (type == LinearRing.class) {
             return linearRing;
         }
         if (type == MultiLineString.class) {
-            return fac.createMultiLineString(new LineString[] { linearRing });
+            return fac.createMultiLineString(new LineString[] { lineString });
         }
         Polygon polygon = fac.createPolygon(linearRing, new LinearRing[0]);
         if (type == Polygon.class) {
@@ -1034,15 +1086,13 @@ public class DataUtilities {
     /**
      * Wraps up the provided feature collection in as a SimpleFeatureSource.
      * <p>
-     * This is usually done for use by the renderer; allowing it to query the feature collection as
-     * required.
+     * This is usually done for use by the renderer; allowing it to query the feature collection as required.
      * 
-     * @param collection
-     *            Feature collection providing content
+     * @param collection Feature collection providing content
      * @return FeatureSource used to wrap the content
      * 
-     * @throws NullPointerException
-     * @throws RuntimeException
+     * @throws NullPointerException if any of the features are null
+     * @throws IllegalArgumentException If the provided collection is inconsistent (perhaps containing mixed feature types)
      */
     public static SimpleFeatureSource source(
             final FeatureCollection<SimpleFeatureType, SimpleFeature> collection) {
@@ -1075,11 +1125,12 @@ public class DataUtilities {
         // }
 
         CollectionDataStore store = new CollectionDataStore(collection);
+        String typeName = store.getTypeNames()[0];
         try {
-            return store.getFeatureSource(store.getTypeNames()[0]);
+            return store.getFeatureSource(typeName);
         } catch (IOException e) {
-            throw new RuntimeException("Something is wrong with the geotools code, "
-                    + "this exception should not happen", e);
+            throw new IllegalArgumentException("CollectionDataStore inconsistent, "
+                    + " ensure type name "+typeName+" is the same for all features", e);
         }
     }
 
@@ -1101,35 +1152,6 @@ public class DataUtilities {
     public static SimpleFeatureSource createView(final DataStore store, final Query query)
             throws IOException, SchemaException {
         return new DefaultView(store.getFeatureSource(query.getTypeName()), query);
-    }
-
-    public static SimpleFeatureCollection results(SimpleFeature[] featureArray) {
-        return results(collection(featureArray));
-    }
-
-    /**
-     * Returns collection if non empty.
-     * 
-     * @param collection
-     * 
-     * @return provided collection
-     * 
-     * @throws IOException
-     *             Raised if collection was empty
-     */
-    public static SimpleFeatureCollection results(final SimpleFeatureCollection collection) {
-        if (collection.size() == 0) {
-            // throw new IOException("Provided collection was empty");
-        }
-        return collection;
-    }
-
-    public static <T extends FeatureType, F extends Feature> FeatureCollection<T, F> results(
-            final FeatureCollection<T, F> collection) {
-        if (collection.size() == 0) {
-            // throw new IOException("Provided collection was empty");
-        }
-        return collection;
     }
 
     /**
@@ -1178,7 +1200,8 @@ public class DataUtilities {
      * @return FeatureCollection
      */
     public static SimpleFeatureCollection collection(SimpleFeature[] features) {
-        SimpleFeatureCollection collection = FeatureCollections.newCollection();
+        // JG: There may be some performance to be gained by using ListFeatureCollection here
+        DefaultFeatureCollection collection = new DefaultFeatureCollection(null,null);
         final int length = features.length;
         for (int i = 0; i < length; i++) {
             collection.add(features[i]);
@@ -1200,6 +1223,50 @@ public class DataUtilities {
         return new DefaultFeatureCollection(featureCollection);
     }
 
+    /**
+     * Checks if the provided iterator implements {@link Closeable}.
+     * <p>
+     * Any problems are logged at {@link Level#FINE}.
+     */
+    public static void close(Iterator<?> iterator) {
+        if (iterator != null && iterator instanceof Closeable) {
+            try {
+                ((Closeable) iterator).close();
+            } catch (IOException e) {
+                String name = iterator.getClass().getPackage().toString();
+                Logger log = Logger.getLogger(name);
+                log.log(Level.FINE, e.getMessage(), e);
+            }
+        }
+    }
+    
+    /**
+     * Obtain the first feature from the collection as an exemplar.
+     * 
+     * @param featureCollection
+     * @return first feature from the featureCollection
+     */
+    public static <F extends Feature> F first( FeatureCollection<?,F> featureCollection ){
+        if (featureCollection == null) {
+            return null;
+        }
+        FeatureIterator<F> iter = featureCollection.features();
+        try {
+            while (iter.hasNext()) {
+                F feature = iter.next();
+                if (feature != null) {
+                    return feature;
+                }
+            }
+            return null; // not found!
+        } finally {
+            iter.close();
+        }
+    }
+    
+    //
+    // Conversion (or casting) from general feature model to simple feature model
+    //
     /**
      * A safe cast to SimpleFeatureCollection; that will introduce a wrapper if it has to.
      * <p>
@@ -1303,7 +1370,7 @@ public class DataUtilities {
         if (featureType == null) {
             return null;
         }
-        // go through the attributes and strip out compicated contents
+        // go through the attributes and strip out complicated contents
         //
         List<PropertyDescriptor> attributes;
         Collection<PropertyDescriptor> descriptors = featureType.getDescriptors();
@@ -1391,25 +1458,59 @@ public class DataUtilities {
         throw new IllegalArgumentException(
                 "The provided feature store contains complex features, cannot be bridged to a simple one");
     }
-
+    //
+    // FeatureCollection Utility Methods
+    //
     /**
-     * Copies the provided fetaures into a List.
+     * Copies the provided features into a List.
      * 
      * @param featureCollection
      * @return List of features copied into memory
      */
-    public static List<SimpleFeature> list(
-            FeatureCollection<SimpleFeatureType, SimpleFeature> featureCollection) {
-        final ArrayList<SimpleFeature> list = new ArrayList<SimpleFeature>();
+    public static <F extends Feature> List<F> list(FeatureCollection<?, F> featureCollection) {
+        final ArrayList<F> list = new ArrayList<F>();
+        FeatureIterator<F> iter = featureCollection.features();
         try {
-            featureCollection.accepts(new FeatureVisitor() {
-                public void visit(Feature feature) {
-                    list.add((SimpleFeature) feature);
-                }
-            }, null);
-        } catch (IOException ignore) {
+            while( iter.hasNext() ){
+                F feature = iter.next();
+                list.add( feature );
+            }
+        }
+        finally {
+            iter.close();
         }
         return list;
+    }
+    /**
+     * Copies the provided fetaures into a List.
+     * 
+     * @param featureCollection
+     * @param maxFeatures Maximum number of features to load
+     * @return List of features copied into memory
+     */
+    public static <F extends Feature> List<F> list(FeatureCollection<?, F> featureCollection, int maxFeatures) {
+        final ArrayList<F> list = new ArrayList<F>();
+        FeatureIterator<F> iter = featureCollection.features();
+        try {
+            for( int count = 0; iter.hasNext() && count < maxFeatures; count++){
+                F feature = iter.next();
+                list.add( feature );        
+            }
+        }
+        finally {
+            iter.close();
+        }
+        return list;
+    }
+    /**
+     * Iteator wrapped around the provided FeatureIterator, implementing {@link Closeable}.
+     * 
+     * @see #close(Iterator)
+     * @param featureIterator
+     * @return Iterator wrapped around provided FeatureIterator, implements Closeable 
+     */
+    public static <F extends Feature> Iterator<F> iterator( FeatureIterator<F> featureIterator ){
+        return new BridgeIterator<F>( featureIterator );
     }
 
     /**
@@ -1432,7 +1533,28 @@ public class DataUtilities {
         }
         return fids;
     }
-
+    //
+    // Conversion to java.util.Collection
+    //
+    /**
+     * Used to quickly cast to a java.util.Collection.
+     * 
+     * @param featureCollection
+     * @return Collection
+     */
+    @SuppressWarnings("unchecked")
+    public static <F extends Feature> Collection<F> collectionCast(
+            FeatureCollection<?, F> featureCollection) {
+        if (featureCollection instanceof Collection<?>) {
+            return (Collection<F>) featureCollection;
+        } else {
+            throw new IllegalArgumentException(
+                    "Require access to SimpleFeatureCollection implementing Collecion.add");
+        }
+    }
+    //
+    // Conversion to FeatureCollection
+    //
     /**
      * Copies the provided features into a FeatureCollection.
      * <p>
@@ -1443,7 +1565,7 @@ public class DataUtilities {
      * @return FeatureCollection
      */
     public static SimpleFeatureCollection collection(List<SimpleFeature> list) {
-        SimpleFeatureCollection collection = FeatureCollections.newCollection();
+        DefaultFeatureCollection collection = new DefaultFeatureCollection( null, null);
         for (SimpleFeature feature : list) {
             collection.add(feature);
         }
@@ -1466,7 +1588,7 @@ public class DataUtilities {
      * @return FeatureCollection
      */
     public static SimpleFeatureCollection collection(SimpleFeature feature) {
-        SimpleFeatureCollection collection = FeatureCollections.newCollection();
+        DefaultFeatureCollection collection = new DefaultFeatureCollection( null, null);
         collection.add(feature);
         return collection;
     }
@@ -1486,7 +1608,7 @@ public class DataUtilities {
      */
     public static SimpleFeatureCollection collection(
             FeatureReader<SimpleFeatureType, SimpleFeature> reader) throws IOException {
-        SimpleFeatureCollection collection = FeatureCollections.newCollection();
+        DefaultFeatureCollection collection = new DefaultFeatureCollection(null,null);
         try {
             while (reader.hasNext()) {
                 try {
@@ -1518,7 +1640,7 @@ public class DataUtilities {
      */
     public static SimpleFeatureCollection collection(SimpleFeatureIterator reader)
             throws IOException {
-        SimpleFeatureCollection collection = FeatureCollections.newCollection();
+        DefaultFeatureCollection collection = new DefaultFeatureCollection( null,null);
         try {
             while (reader.hasNext()) {
                 try {
@@ -1532,7 +1654,9 @@ public class DataUtilities {
         }
         return collection;
     }
-
+    //
+    // Attribute Value Utility Methods
+    //
     /**
      * Used to compare if two values are equal.
      * <p>
@@ -1543,7 +1667,7 @@ public class DataUtilities {
      * 
      * <ul>
      * <li>Object.equals( Object )</li>
-     * <li>Geometry.equals( Geometry )</li>
+     * <li>Geometry.equals( Geometry ) - similar to {@link Geometry#equalsExact(Geometry)}</li>
      * </ul>
      * 
      * @param att
@@ -1568,7 +1692,10 @@ public class DataUtilities {
 
         return true;
     }
-
+    
+    //
+    // TypeConversion methods used by FeatureReaders
+    //
     /**
      * Create a derived FeatureType
      * 
@@ -1658,7 +1785,7 @@ public class DataUtilities {
         tb.setNamespaceURI(namespace);
         tb.setCRS(null); // not interested in warnings from this simple method
         tb.addAll(types);
-
+        setDefaultGeometry(tb, properties, featureType);
         return tb.buildFeatureType();
     }
 
@@ -1698,9 +1825,23 @@ public class DataUtilities {
         for (int i = 0; i < properties.length; i++) {
             tb.add(featureType.getDescriptor(properties[i]));
         }
+        setDefaultGeometry(tb, properties, featureType);
         return tb.buildFeatureType();
     }
 
+    private static void setDefaultGeometry(SimpleFeatureTypeBuilder typeBuilder, String[] properties,
+            SimpleFeatureType featureType) {
+        GeometryDescriptor geometryDescriptor = featureType.getGeometryDescriptor();
+        if (geometryDescriptor != null) {
+            String propertyName = geometryDescriptor.getLocalName();
+            if (Arrays.asList(properties).contains(propertyName)) {
+                typeBuilder.setDefaultGeometry(propertyName);
+            }
+        }
+    }
+    //
+    // Decoding (ie Parsing) support for PropertyAttributeReader and tutorials
+    //
     /**
      * Utility method for FeatureType construction.
      * <p>
@@ -1708,74 +1849,70 @@ public class DataUtilities {
      * </p>
      * 
      * <p>
-     * Where <i>Type</i> is defined by createAttribute.
-     * </p>
-     * 
-     * <p>
-     * You may indicate the default Geometry with an astrix: "*geom:Geometry". You may also indicate
-     * the srid (used to look up a EPSG code).
+     * Where <i>Type</i> is defined by {@link createAttribute}:
+     * <ul>
+     * <li>Each attribute descriptor is defined using the form: <i>"name:Type:hint"</i> </li>
+     * <li>Where <i>Type</i> is:
+     *   <ul>
+     *     <li>0,Interger,int: represents Interger</li>
+     *     <li>0.0, Double, double: represents Double</li>
+     *     <li>"",String,string: represents String</li>
+     *     <li>Geometry: represents Geometry, additional common geometry types supported including
+     *         Point,LineString,Polygon,MultiLineString,MultiPolygon,MultiPoint,GeometryCollection</ul>
+     *     <li>UUID</li>
+     *     <li>Date</li>
+     *     <li><i>full.class.path</i>: represents java type</li>
+     *   </ul>
+     * </li>
+     * <li>Where <i>hint</i> is "hint1;hint2;...;hintN", in which "hintN" is one of:
+     *   <ul>
+     *   <li><code>nillable</code></li>
+     *   <li><code>srid=<#></code></li>
+     *   </ul>
+     * </li>
+     * <li>You may indicate the default Geometry with an astrix: "*geom:Geometry".</li>
+     * <li>You may also indicate the srid (used to look up a EPSG code): "*point:Point:3226</li>
      * </p>
      * 
      * <p>
      * Examples:
      * <ul>
-     * <li><code>name:"",age:0,geom:Geometry,centroid:Point,url:java.io.URL"</code>
-     * <li><code>id:String,polygonProperty:Polygon:srid=32615</code>
+     * <li><code>name:"",age:0,geom:Geometry,centroid:Point,url:java.io.URL"</code></li>
+     * <li><code>id:String,polygonProperty:Polygon:srid=32615</code></li>
+     * <li><code>identifier:UUID,location:Point,*area:MultiPolygon,created:Date</code></li>
+     * <li><code>uuid:UUID,name:String,description:String,time:java.sql.Timestamp</code></li>
      * </ul>
      * </p>
      * 
-     * @param identification
+     * @param typeName
      *            identification of FeatureType: (<i>namesapce</i>).<i>typeName</i>
      * @param typeSpec
-     *            Specification for FeatureType
+     *            Specification of FeatureType attributes "name:Type,name2:Type2,..."
      * 
      * 
      * @throws SchemaException
      */
-    public static SimpleFeatureType createType(String identification, String typeSpec)
+    public static SimpleFeatureType createType(String typeName, String typeSpec)
             throws SchemaException {
-        int split = identification.lastIndexOf('.');
-        String namespace = (split == -1) ? null : identification.substring(0, split);
-        String typeName = (split == -1) ? identification : identification.substring(split + 1);
+        int split = typeName.lastIndexOf('.');
+        String namespace = (split == -1) ? null : typeName.substring(0, split);
+        String name = (split == -1) ? typeName : typeName.substring(split + 1);
 
-        return createType(namespace, typeName, typeSpec);
+        return createType(namespace, name, typeSpec);
     }
 
     /**
      * Utility method for FeatureType construction.
      * <p>
-     * Will parse a String of the form: <i>"name:Type,name2:Type2,..."</i>
-     * </p>
-     * 
-     * <p>
-     * Where <i>Type</i> is defined by createAttribute.
-     * </p>
-     * 
-     * <p>
-     * You may indicate the default Geometry with an astrix: "*geom:Geometry". You may also indicate
-     * the srid (used to look up a EPSG code).
-     * </p>
-     * 
-     * <p>
-     * Examples:
-     * <ul>
-     * <li><code>name:"",age:0,geom:Geometry,centroid:Point,url:java.io.URL"</code>
-     * <li><code>id:String,polygonProperty:Polygon:srid=32615</code>
-     * </ul>
-     * </p>
-     * 
-     * @param identification
-     *            identification of FeatureType: (<i>namesapce</i>).<i>typeName</i>
-     * @param typeSpec
-     *            Specification for FeatureType
-     * 
-     * 
+     * @param namespace Typename namespace used to qualify the provided name
+     * @param name Typename name, as qualified by namespace
+     * @param typeSpec Definition of attributes, for details see {@link #createType(String, String)}
      * @throws SchemaException
      */
-    public static SimpleFeatureType createType(String namespace, String typeName, String typeSpec)
+    public static SimpleFeatureType createType(String namespace, String name, String typeSpec)
             throws SchemaException {
         SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
-        builder.setName(typeName);
+        builder.setName(name);
         builder.setNamespaceURI(namespace);
 
         String[] types = typeSpec.split(",");
@@ -1799,32 +1936,70 @@ public class DataUtilities {
         return builder.buildFeatureType();
     }
 
+    //
+    // Encoding support for PropertyFeatureWriter
+    //
     /**
-     * Uses Converers to parse the provided text into the correct values to create a feature.
+     * Encode the provided featureType as a String suitable for use with {@link #createType}.
+     * <p>
+     * The format of this string acts as the "header" information for the PropertyDataStore
+     * implementations. 
      * 
-     * @param type
-     *            FeatureType
-     * @param fid
-     *            Feature ID for new feature
-     * @param text
-     *            Text representation of values
+     * Example:<pre><code>String header = "_="+DataUtilities.encodeType(schema);</code></pre>
+     * <p>
+     * For more information please review the PropertyDataStore tutorials.
      * 
-     * @return newly created feature
-     * 
-     * @throws IllegalAttributeException
+     * @param featureType
+     * @return String representation of featureType suitable for use with {@link #createType}
      */
-    public static SimpleFeature parse(SimpleFeatureType type, String fid, String[] text)
-            throws IllegalAttributeException {
-        Object[] attributes = new Object[text.length];
+    public static String encodeType(SimpleFeatureType featureType) {
+        Collection<PropertyDescriptor> types = featureType.getDescriptors();
+        StringBuffer buf = new StringBuffer();
 
-        for (int i = 0; i < text.length; i++) {
-            AttributeType attType = type.getDescriptor(i).getType();
-            attributes[i] = Converters.convert(text[i], attType.getBinding());
+        for (PropertyDescriptor type : types) {
+            buf.append(type.getName().getLocalPart());
+            buf.append(":");
+            buf.append(typeMap(type.getType().getBinding()));
+            if (type instanceof GeometryDescriptor) {
+                GeometryDescriptor gd = (GeometryDescriptor) type;
+                int srid = toSRID( gd.getCoordinateReferenceSystem() );
+                if( srid != -1 ){
+                    buf.append(":srid=" + srid);
+                }
+            }
+            buf.append(",");
         }
-
-        return SimpleFeatureBuilder.build(type, attributes, fid);
+        buf.delete(buf.length() - 1, buf.length()); // remove last ","
+        return buf.toString();
     }
-
+    /**
+     * Quickly review provided crs checking for an "EPSG:SRID" reference identifier.
+     * <p>
+     * @see CRS#lookupEpsgCode(CoordinateReferenceSystem, boolean) for full search
+     * @param crs
+     * @return srid or -1 if not found
+     */
+    private static int toSRID( CoordinateReferenceSystem crs ){
+        if (crs == null || crs.getIdentifiers() == null) {
+            return -1; // not found
+        }
+        for (Iterator<ReferenceIdentifier> it = crs.getIdentifiers().iterator(); it
+                .hasNext();) {
+            ReferenceIdentifier id = it.next();
+            Citation authority = id.getAuthority();
+            if (authority != null
+                    && authority.getTitle().equals(Citations.EPSG.getTitle())) {
+                try {
+                    return Integer.parseInt( id.getCode() );
+                }
+                catch (NumberFormatException nanException ){
+                    continue;
+                }
+            }
+        }
+        return -1;
+    }
+    
     /**
      * A "quick" String representation of a FeatureType.
      * <p>
@@ -1835,6 +2010,7 @@ public class DataUtilities {
      *            FeatureType to represent
      * 
      * @return The string "specification" for the featureType
+     * @deprecated Renamed to {@link #encodeType} for concistency with {@link #createType}
      */
     public static String spec(FeatureType featureType) {
         Collection<PropertyDescriptor> types = featureType.getDescriptors();
@@ -1864,32 +2040,289 @@ public class DataUtilities {
             buf.append(",");
         }
         buf.delete(buf.length() - 1, buf.length()); // remove last ","
-
         return buf.toString();
     }
+    /**
+     * Reads in SimpleFeature that has been encoded into a line of text.
+     * <p>
+     * Example:<pre>
+     * SimpleFeatureType featureType =
+     *    DataUtilities.createType("FLAG","id:Integer|name:String|geom:Geometry:4326");
+     *    
+     * SimpleFeature feature = 
+     *    DataUtilities.createFeature( featureType, "fid1=1|Jody Garnett\\nSteering Committee|POINT(1,2)" );
+     * </pre>
+     * This format is used by the PropertyDataStore tutorials. It amounts to:
+     * <ul>
+     * <li>
+     * <li>Encoding of <i>FeatureId</i> followed by the attributes</li>
+     * <li>Attributes are seperated using the bar character</li>
+     * <li>Geometry is handled using {@link WKTReader2}</li>
+     * <li>Support for common escaped characters</li>
+     * <li>Multi-line support using escaped line-feed characters</li>
+     * <ul>
+     * @param featureType
+     * @param line
+     * @return SimpleFeature defined by the provided line of text
+     */
+    public static SimpleFeature createFeature( SimpleFeatureType featureType, String line ){
+        String fid;
+        
+        int fidSplit = line.indexOf('=');
+        int barSplit = line.indexOf('|');
+        if( fidSplit == -1 || (barSplit != -1 && barSplit < fidSplit) ){
+            fid = null; // we need to generate a feature id
+        }
+        else {
+            fid = line.substring(0, fidSplit);
+        }
+        String data = line.substring(fidSplit+1);
+        String text[] = splitIntoText(data, featureType );
+        Object[] values = new Object[ text.length ];
+        for( int i=0; i<text.length;i++){
+            AttributeDescriptor descriptor = featureType.getDescriptor(i);
+            Object value = createValue( descriptor, text[i] );
+            values[i] = value;
+        }
+        SimpleFeature feature = SimpleFeatureBuilder.build( featureType, values, fid );
+        
+        return feature;
+    }
+    
+    /**
+     * Split the provided text using | charater as a seperator.
+     * <p>
+     * This method respects the used of \ to "escape" a | character allowing
+     * representations such as the following:<pre>
+     * String example="text|example of escaped \\| character|text";
+     * 
+     * // represents: "text|example of escaped \| character|text"
+     * String split=splitIntoText( example );</pre>
+     * 
+     * @param data Origional raw text as stored
+     * @return data split using | as seperator
+     * @throws DataSourceException if the information stored is inconsistent with the headered provided
+     */
+    private static String[] splitIntoText(String data,SimpleFeatureType type) {
+        // return data.split("|", -1); // use -1 as a limit to include empty trailing spaces
+        // return data.split("[.-^\\\\]\\|",-1); //use -1 as limit to include empty trailing spaces
 
-    static Class type(String typeName) throws ClassNotFoundException {
+        String text[] = new String[type.getAttributeCount()];
+        int i = 0;
+        StringBuilder item = new StringBuilder();
+        for (String str : data.split("\\|",-1)) {
+            if (i == type.getAttributeCount()) {
+                // limit reached
+                throw new IllegalArgumentException("format error: expected " + text.length
+                        + " attributes, stopped after finding " + i + ". [" + data
+                        + "] split into " + Arrays.asList(text));
+            }
+            if (str.endsWith("\\")) {
+                item.append(str);
+                item.append("|");
+            } else {
+                item.append(str);
+                text[i] = item.toString();
+                i++;
+                item = new StringBuilder();
+            }
+        }
+        if (i < type.getAttributeCount()) {
+            throw new IllegalArgumentException("createFeature format error: expected " + type.getAttributeCount()
+                    + " attributes, but only found " + i + ". [" + data + "] split into "
+                    + Arrays.asList(text));
+        }
+        return text;
+    }
+    /**
+     * Reads an attribute value out of the raw text supplied to {@link #createFeature}.
+     * <p>
+     * This method is responsible for:
+     * <ul>
+     * <li>Handling: <code>"<null>"</code> as an explicit marker flag for a null value</li>
+     * <li>Using {@link #decodeEscapedCharacters(String)} to unpack the raw text</li>
+     * <li>Using {@link Converters} to convert the text to the requested value</li>
+     * @param descriptor
+     * @param rawText
+     * @return
+     */
+    private static Object createValue(AttributeDescriptor descriptor, String rawText) {
+        String stringValue = null;
+        try {
+            // read the value and decode any interesting characters
+            stringValue = decodeEscapedCharacters(rawText);
+        } catch (RuntimeException huh) {
+            huh.printStackTrace();
+            stringValue = null;
+        }
+        // check for special <null> flag
+        if ("<null>".equals(stringValue)) {
+            stringValue = null;
+        }
+        if (stringValue == null) {
+            if (descriptor.isNillable()) {
+                return null; // it was an explicit "<null>"
+            }
+        }
+        // Use of Converters to convert from String to requested java binding
+        Object value = Converters.convert(stringValue, descriptor.getType().getBinding());
+
+        if (descriptor.getType() instanceof GeometryType) {
+            // this is to be passed on in the geometry objects so the srs name gets encoded
+            CoordinateReferenceSystem crs = ((GeometryType) descriptor.getType())
+                    .getCoordinateReferenceSystem();
+            if (crs != null) {
+                // must be geometry, but check anyway
+                if (value != null && value instanceof Geometry) {
+                    ((Geometry) value).setUserData(crs);
+                }
+            }
+        }
+        return value;
+    }
+    /**
+     * Produce a String encoding of SimpleFeature for use with {@link #createFeature}.
+     * <p>
+     * This method inlcudes the full featureId information.
+     * @param feature feature to encode, only SimpleFeature is supported at this time
+     * @return text encoding for use with {@link #createFeature}
+     */
+    public static String encodeFeature(SimpleFeature feature){
+        return encodeFeature(feature, true );
+    }
+    /**
+     * Produce a String encoding of SimpleFeature for use with {@link #createFeature}.
+     * <p>
+     * This method inlcudes the full featureId information.
+     * @param feature feature to encode, only SimpleFeature is supported at this time
+     * @param includeFid true to include the optional feature id
+     * @return text encoding for use with {@link #createFeature}
+     */
+    public static String encodeFeature(SimpleFeature feature,boolean includeFid ){
+        StringBuilder build = new StringBuilder();
+        if( includeFid ){
+            String fid = feature.getID();
+            if( feature.getUserData().containsKey(Hints.PROVIDED_FID)){
+                fid = (String) feature.getUserData().get(Hints.PROVIDED_FID);
+            }
+            build.append(fid);
+            build.append("=");
+        }
+        for (int i = 0; i < feature.getAttributeCount(); i++) {
+            Object attribute = feature.getAttribute(i);
+            if( i != 0 ){
+                build.append("|"); // seperator character
+            }
+            if (attribute == null) {
+                build.append("<null>"); // nothing!
+            } else if( attribute instanceof String){
+                String txt = encodeString((String) attribute);
+                build.append( txt );
+            } else if (attribute instanceof Geometry) {
+                Geometry geometry = (Geometry) attribute;
+                String txt = geometry.toText();
+                
+                txt = encodeString( txt );
+                build.append( txt );
+            } else {
+                String txt = Converters.convert( attribute, String.class );
+                if( txt == null ){ // could not convert?
+                    txt = attribute.toString();
+                }
+                txt = encodeString( txt );
+                build.append( txt );
+            }
+        }
+        return build.toString();
+    }
+
+    /**
+     * Uses {@link Converters} to parse the provided text into the correct values to create a feature.
+     * 
+     * @param type
+     *            FeatureType
+     * @param fid
+     *            Feature ID for new feature
+     * @param text
+     *            Text representation of values
+     * 
+     * @return newly created feature
+     * @throws IllegalAttributeException
+     */
+    public static SimpleFeature parse(SimpleFeatureType type, String fid, String[] text)
+            throws IllegalAttributeException {
+        Object[] attributes = new Object[text.length];
+
+        for (int i = 0; i < text.length; i++) {
+            AttributeType attType = type.getDescriptor(i).getType();
+            attributes[i] = Converters.convert(text[i], attType.getBinding());
+        }
+        return SimpleFeatureBuilder.build(type, attributes, fid);
+    }
+
+    //
+    // Internal utility methods to support PropertyDataStore feature encoding / decoding
+    //
+    /**
+     * Used to decode common whitespace chracters and escaped | characters.
+     * 
+     * @param txt Origional raw text as stored
+     * @return decoded text as provided for storage
+     * @see PropertyAttributeWriter#encodeString(String)
+     */
+    private static String decodeEscapedCharacters( String txt ){
+        // unpack whitespace constants
+        txt = txt.replace( "\\n", "\n");
+        txt = txt.replaceAll("\\r", "\r" );
+
+        // unpack our our escaped characters
+        txt = txt.replace("\\|", "|" );
+        // txt = txt.replace("\\\\", "\\" );
+        
+        return txt;
+    }
+    
+    /**
+     * Used to encode common whitespace characters and | character for safe transport.
+     * 
+     * @param txt
+     * @return txt encoded for storage
+     * @see PropertyAttributeReader#decodeString(String)
+     */
+    private static String encodeString( String txt ){
+        // encode our escaped characters
+        // txt = txt.replace("\\", "\\\\");
+        txt = txt.replace("|","\\|");
+
+        // encode whitespace constants
+        txt = txt.replace("\n", "\\n");
+        txt = txt.replace("\r", "\\r");
+
+        return txt;
+    }
+    /**
+     * Internal method to access java binding using readable typename.
+     * @see #createType(String, String)
+     */
+    static Class<?> type(String typeName) throws ClassNotFoundException {
         if (typeMap.containsKey(typeName)) {
             return typeMap.get(typeName);
         }
-
         return Class.forName(typeName);
     }
-
-    static String typeMap(Class type) {
+    /**
+     * Internal method to access the readable typename for the provided class.
+     * @see #createType(String, String)
+     */
+    static String typeMap(Class<?> type) {
         if (typeEncode.containsKey(type)) {
             return typeEncode.get(type);
         }
-        /*
-         * SortedSet<String> choose = new TreeSet<String>(); for (Iterator i =
-         * typeMap.entrySet().iterator(); i.hasNext();) { Map.Entry entry = (Entry) i.next();
-         * 
-         * if (entry.getValue().equals(type)) { choose.add( (String) entry.getKey() ); } } if(
-         * !choose.isEmpty() ){ return choose.last(); }
-         */
         return type.getName();
     }
-
+    //
+    // Query Support Methods for DataStore implementators
+    // 
     /**
      * Factory method to produce Comparator based on provided Query SortBy information.
      * <p>
@@ -2155,39 +2588,13 @@ public class DataUtilities {
     }
 
     /**
-     * Returns AttributeType based on String specification (based on UML).
-     * 
+     * Generate AttributeDescriptor based on String type specification (based on UML).
      * <p>
-     * Will parse a String of the form: <i>"name:Type:hint"</i>
-     * </p>
-     * 
-     * <p>
-     * Where <i>Type</i> is:
-     * </p>
-     * 
-     * <ul>
-     * <li>
-     * 0,Interger,int: represents Interger</li>
-     * <li>
-     * 0.0, Double, double: represents Double</li>
-     * <li>
-     * "",String,string: represents String</li>
-     * <li>
-     * Geometry: represents Geometry</li>
-     * <li>
-     * <i>full.class.path</i>: represents java type</li>
-     * </ul>
-     * 
-     * <p>
-     * Where <i>hint</i> is "hint1;hint2;...;hintN", in which "hintN" is one of:
-     * <ul>
-     * <li><code>nillable</code></li>
-     * <li><code>srid=<#></code></li>
-     * </ul>
+     * Will parse a String of the form: <i>"name:Type:hint" as described in {@link #createType}</i>
      * </p>
      * 
      * @param typeSpec
-     * 
+     * @see #createType
      * 
      * @throws SchemaException
      *             If typeSpect could not be interpreted
@@ -2261,26 +2668,167 @@ public class DataUtilities {
     }
 
     /**
-     * Manually calculates the bounds of a feature collection.
-     * 
+     * Manually count the number of features from the provided FeatureIterator.
+     * This implementation is intended for FeatureCollection implementors and test case
+     * verification. Client code should always call {@link FeatureCollection#size()}
      * @param collection
+     * @return number of featuers in feature collection
+     */
+    public static int count( FeatureIterator<?> iterator) {
+        int count = 0;
+        if( iterator != null ){
+            try {
+                while (iterator.hasNext()) {
+                    @SuppressWarnings("unused")
+                    Feature feature = iterator.next();
+                    count++;
+                }
+                return count;
+            }
+            finally {
+                iterator.close();
+            }
+        }
+        return count;
+    }
+    /**
+     * Manually count the number of features in a feature collection using using {@link FeatureCollection#features()}.
+     * 
+     * This implementation is intended for FeatureCollection implementors and test case
+     * verification. Client code should always call {@link FeatureCollection#size()}
+     * @param collection
+     * @return number of featuers in feature collection
+     */
+    public static int count(
+            FeatureCollection<? extends FeatureType, ? extends Feature> collection) {
+        int count = 0;
+        FeatureIterator<? extends Feature> i = collection.features();
+        try {
+            while (i.hasNext()) {
+                @SuppressWarnings("unused")
+                Feature feature = (Feature) i.next();
+                count++;
+            }
+            return count;
+        }
+        finally {
+            if( i != null ){
+                i.close();
+            }
+        }
+    }
+    /**
+     * Manually calculate the bounds from the provided FeatureIteator.
+     * This implementation is intended for FeatureCollection implementors and test case
+     * verification. Client code should always call {@link FeatureCollection#getBounds()}.
+     * 
+     * @param iterator
      * @return
      */
-    public static Envelope bounds(
+    public static ReferencedEnvelope bounds( FeatureIterator<?> iterator ){
+        if( iterator == null ){
+            return null;
+        }
+        try {
+            ReferencedEnvelope bounds = null;
+            while (iterator.hasNext()) {
+                Feature feature = iterator.next();
+                ReferencedEnvelope featureEnvelope = null;
+                if(feature != null && feature.getBounds() != null) {
+                    featureEnvelope = ReferencedEnvelope.reference(feature.getBounds());
+                }
+                
+                if(featureEnvelope != null) {
+                    if(bounds == null) {
+                        bounds = new ReferencedEnvelope(featureEnvelope);
+                    } else {
+                        bounds.expandToInclude(featureEnvelope);
+                    }
+                }
+            }            
+            return bounds;
+        } finally {
+            iterator.close();
+        }
+    }
+    /**
+     * Manually calculates the bounds of a feature collection using {@link FeatureCollection#features()}.
+     * <p>
+     * This implementation is intended for FeatureCollection implementors and test case
+     * verification. Client code should always call {@link FeatureCollection#getBounds()}.
+     *  
+     * @param collection
+     * @return bounds of features in feature collection
+     */
+    public static ReferencedEnvelope bounds(
             FeatureCollection<? extends FeatureType, ? extends Feature> collection) {
         FeatureIterator<? extends Feature> i = collection.features();
         try {
-            ReferencedEnvelope bounds = new ReferencedEnvelope(collection.getSchema()
-                    .getCoordinateReferenceSystem());
-            if (!i.hasNext()) {
-                bounds.setToNull();
-                return bounds;
-            }
+            // Implementation taken from DefaultFeatureCollection implementation - thanks IanS
+            CoordinateReferenceSystem crs = collection.getSchema().getCoordinateReferenceSystem();
+            ReferencedEnvelope bounds = new ReferencedEnvelope(crs);
 
-            bounds.init(((SimpleFeature) i.next()).getBounds());
+            while (i.hasNext()) {
+                Feature feature = i.next();
+                if( feature == null ) continue;
+                
+                BoundingBox geomBounds = feature.getBounds();
+                // IanS - as of 1.3, JTS expandToInclude ignores "null" Envelope
+                // and simply adds the new bounds...
+                // This check ensures this behavior does not occur.
+                if ( geomBounds != null && !geomBounds.isEmpty() ) {
+                    bounds.include(geomBounds);
+                }
+            }
             return bounds;
+        }
+        finally {
+            if( i != null ){
+                i.close();
+            }
+        }
+    }
+
+    /**
+     * Manually visit each feature using {@link FeatureCollection#features()}.
+     * <p>
+     * This method is intended to assist FeatureCollection implementors, and used to verify test-case results. Client code should always call
+     * {@link FeatureCollection#accepts(FeatureVisitor, ProgressListener)}
+     * 
+     * @param collection
+     * @return bounds of features in feature collection
+     */
+    public static void visit(FeatureCollection<?, ?> collection, FeatureVisitor visitor,
+            ProgressListener progress) throws IOException {
+        FeatureIterator<?> iterator = null;
+        float size = progress != null ? collection.size() : 0;
+        if (progress == null) {
+            progress = new NullProgressListener();
+        }
+        try {
+            float position = 0;
+            progress.started();
+            iterator = collection.features();
+            while (!progress.isCanceled() && iterator.hasNext()) {
+                Feature feature = null;
+                try {
+                    feature = iterator.next();
+                    visitor.visit(feature);
+                    if (size > 0) {
+                        progress.progress(position++ / size);
+                    }
+                } catch (Exception erp) {
+                    progress.exceptionOccurred(erp);
+                    String fid = feature == null ? "feature" : feature.getIdentifier().toString();
+                    throw new IOException("Problem with " + collection.getID() + " visiting " + fid
+                            + ":" + erp, erp);
+                }
+            }
         } finally {
-            i.close();
+            progress.complete();
+            if (iterator != null) {
+                iterator.close();
+            }
         }
     }
 
@@ -2479,6 +3027,30 @@ public class DataUtilities {
                 return false;
             }
         };
+    }
+    
+    
+    /**
+     * Create a non-simple template feature from feature type schema
+     * 
+     * @param schema the feature type
+     * @return a template feature
+     */
+    public static Feature templateFeature(FeatureType schema) {
+    	FeatureFactory ff = CommonFactoryFinder.getFeatureFactory(null);
+    	Collection<Property> value = new ArrayList<Property>();
+    	
+    	for (PropertyDescriptor pd : schema.getDescriptors()) {
+    		if (pd instanceof AttributeDescriptor) {
+    			if (pd instanceof GeometryDescriptor) {
+    				value.add(new GeometryAttributeImpl (((AttributeDescriptor) pd).getDefaultValue(), (GeometryDescriptor) pd, null) );
+    			} else {
+    				value.add(new AttributeImpl (((AttributeDescriptor) pd).getDefaultValue(), (AttributeDescriptor) pd, null) );
+    			}
+    		}                
+        }
+    	
+    	return ff.createFeature(value, (FeatureType)  schema, SimpleFeatureBuilder.createDefaultFeatureId());    		
     }
 
 }

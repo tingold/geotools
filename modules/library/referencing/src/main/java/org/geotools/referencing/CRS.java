@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -34,6 +35,7 @@ import org.geotools.factory.FactoryNotFoundException;
 import org.geotools.factory.FactoryRegistryException;
 import org.geotools.factory.GeoTools;
 import org.geotools.factory.Hints;
+import org.geotools.geometry.DirectPosition2D;
 import org.geotools.geometry.Envelope2D;
 import org.geotools.geometry.GeneralDirectPosition;
 import org.geotools.geometry.GeneralEnvelope;
@@ -46,6 +48,8 @@ import org.geotools.referencing.factory.AbstractAuthorityFactory;
 import org.geotools.referencing.factory.IdentifiedObjectFinder;
 import org.geotools.referencing.operation.DefaultMathTransformFactory;
 import org.geotools.referencing.operation.projection.MapProjection;
+import org.geotools.referencing.operation.projection.PolarStereographic;
+import org.geotools.referencing.operation.transform.ConcatenatedTransform;
 import org.geotools.referencing.operation.transform.IdentityTransform;
 import org.geotools.referencing.wkt.Formattable;
 import org.geotools.resources.CRSUtilities;
@@ -66,6 +70,7 @@ import org.opengis.metadata.extent.BoundingPolygon;
 import org.opengis.metadata.extent.Extent;
 import org.opengis.metadata.extent.GeographicBoundingBox;
 import org.opengis.metadata.extent.GeographicExtent;
+import org.opengis.parameter.ParameterValue;
 import org.opengis.referencing.AuthorityFactory;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.IdentifiedObject;
@@ -93,6 +98,7 @@ import org.opengis.referencing.operation.CoordinateOperationFactory;
 import org.opengis.referencing.operation.MathTransform;
 import org.opengis.referencing.operation.MathTransform2D;
 import org.opengis.referencing.operation.NoninvertibleTransformException;
+import org.opengis.referencing.operation.Projection;
 import org.opengis.referencing.operation.TransformException;
 
 
@@ -136,6 +142,8 @@ import org.opengis.referencing.operation.TransformException;
 public final class CRS {
     
     static final Logger LOGGER = Logging.getLogger(CRS.class);
+    
+    static volatile AtomicBoolean FORCED_LON_LAT = null;
     
     /**
      * Enumeration describing axis order for geographic coordinate reference systems.
@@ -247,18 +255,40 @@ public final class CRS {
             throws FactoryRegistryException
     {
         CRSAuthorityFactory factory = (longitudeFirst) ? xyFactory : defaultFactory;
-        if (factory == null) try {
-            factory = new DefaultAuthorityFactory(longitudeFirst);
-            if (longitudeFirst) {
-                xyFactory = factory;
-            } else {
-                defaultFactory = factory;
+        if (factory == null) 
+            try {
+                // what matters is the value of the flag when the factories are created,. do updated
+                updateForcedLonLat();
+                factory = new DefaultAuthorityFactory(longitudeFirst);
+                if (longitudeFirst) {
+                    xyFactory = factory;
+                } else {
+                    defaultFactory = factory;
+                }
+            } catch (NoSuchElementException exception) {
+                // No factory registered in FactoryFinder.
+                throw new FactoryNotFoundException(null, exception);
             }
-        } catch (NoSuchElementException exception) {
-            // No factory registered in FactoryFinder.
-            throw new FactoryNotFoundException(null, exception);
-        }
         return factory;
+    }
+    
+    private static void updateForcedLonLat() {
+        boolean forcedLonLat = false;
+        try {
+            forcedLonLat = Boolean.getBoolean("org.geotools.referencing.forceXY") || 
+                Boolean.TRUE.equals(Hints.getSystemDefault(Hints.FORCE_LONGITUDE_FIRST_AXIS_ORDER));
+        } catch(Exception e) {
+            // all right it was a best effort attempt
+            LOGGER.log(Level.FINE, "Failed to determine if we are in forced lon/lat mode", e);
+        }
+        FORCED_LON_LAT = new AtomicBoolean(forcedLonLat);
+    }
+    
+    private static boolean isForcedLonLat() {
+        if(FORCED_LON_LAT == null) {
+            updateForcedLonLat();
+        }
+        return FORCED_LON_LAT.get();
     }
 
     /**
@@ -762,12 +792,26 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
         if(projectedCRS == null)
             return null;
         
-        MathTransform mt = projectedCRS.getConversionFromBase().getMathTransform();
-        if(mt instanceof MapProjection)
-            return (MapProjection) mt;
-        
-        return null;
+        Projection conversion = projectedCRS.getConversionFromBase();
+        MathTransform mt = conversion.getMathTransform();
+        return unrollProjection(mt);
     }
+
+    private static MapProjection unrollProjection(MathTransform mt) {
+        if(mt instanceof MapProjection) {
+            return (MapProjection) mt;
+        } else if(mt instanceof ConcatenatedTransform) {
+            ConcatenatedTransform ct = (ConcatenatedTransform) mt;
+            MapProjection result = unrollProjection(ct.transform1);
+            if(result == null) {
+                result = unrollProjection(ct.transform2);
+            }
+            return result;
+        } else {
+            return null;
+        }
+    }
+
 
     /**
      * Returns the first vertical coordinate reference system found in a the given CRS,
@@ -877,9 +921,10 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
      * Spatial Reference System (ie SRS) values:
      * <ul>
      *   <li>{@code EPSG:4326} - this is the usual format understood to mean <cite>forceXY</cite>
-     *       order. Note that the axis order is <em>not necessarly</em> (<var>longitude</var>,
+     *       order prior to WMS 1.3.0. Note that the axis order is <em>not necessarly</em> (<var>longitude</var>,
      *       <var>latitude</var>), but this is the common behavior we observe in practice.</li>
      *   <li>{@code AUTO:43200} - </li>
+     *   <li>{@code CRS:84} - similar to {@link DefaultGeographicCRS#WGS84} (formally defined by CRSAuthorityFactory)
      *   <li>{@code ogc:uri:.....} - understood to match the EPSG database axis order.</li>
      *   <li>Well Known Text (WKT)</li>
      * </ul>
@@ -890,15 +935,10 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
      * @since 2.5
      */
     public static String toSRS(final CoordinateReferenceSystem crs) {
-        boolean forcedLonLat = false;
-        try {
-            forcedLonLat = Boolean.getBoolean("org.geotools.referencing.forceXY") || 
-                Boolean.TRUE.equals(Hints.getSystemDefault(Hints.FORCE_LONGITUDE_FIRST_AXIS_ORDER));
-        } catch(Exception e) {
-            // all right it was a best effort attempt
-            LOGGER.log(Level.FINE, "Failed to determine if we are in forced lon/lat mode", e);
+        if (crs == null) {
+            return null;
         }
-        if (forcedLonLat && CRS.getAxisOrder(crs, false) == AxisOrder.NORTH_EAST) {
+        if (isForcedLonLat() && CRS.getAxisOrder(crs, false) == AxisOrder.NORTH_EAST) {
             try {
                 // not usual axis order, check if we can have a EPSG code
                 Integer code = CRS.lookupEpsgCode(crs, false);
@@ -910,22 +950,36 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
                 LOGGER.log(Level.FINE, "Failed to determine EPSG code", e);
             }
         }
-        
-        // fall back on simple lookups
-        if( crs == null ){
-            return null;
+        // special case DefaultGeographic.WGS84 to prevent SRS="WGS84(DD)"
+        if (crs == DefaultGeographicCRS.WGS84) {
+            // if( forcedLonLat ) return "EPSG:4326"; <-- this is a bad idea for interoperability WMS 1.3.0
+            return "CRS:84"; // WMS Authority definition DefaultGeographicCRS.WGS84
         }
-        final Set<ReferenceIdentifier> identifiers = crs.getIdentifiers();
+        Set<ReferenceIdentifier> identifiers = crs.getIdentifiers();
         if (identifiers.isEmpty()) {
-            // fallback unfortunately this often does not work
+            // we got nothing to work with ... unfortunately this often does not work
             final ReferenceIdentifier name = crs.getName();
             if (name != null) {
                 return name.toString();
             }
+            return null;
         } else {
+            // check for an identifier to use as an srsName
+            for (ReferenceIdentifier identifier : crs.getIdentifiers()) {
+                String srs = identifier.toString();
+                if (srs.contains("EPSG:") || srs.contains("CRS:")) {
+                    return srs; // handles prj files that supply EPSG code
+                }
+            }
+            // fallback unfortunately this often does not work
+            ReferenceIdentifier name = crs.getName();
+            if (name != null
+                    && (name.toString().contains("EPSG:") || name.toString().contains("CRS:"))) {
+                return name.toString();
+            }
+            // nothing was obviously an identifier .. so we grab the first
             return identifiers.iterator().next().toString();
         }
-        return null;
     }
     /**
      * Returns the <cite>Spatial Reference System</cite> identifier, or {@code null} if none.
@@ -934,13 +988,13 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
      * true for force a very simple representation that is just based on the code portion.
      * 
      * @param crs
-     * @param simple Set to true to force generation of a simple srsName entry
+     * @param codeOnly Set to true to force generation of a simple srsName using only the code portion
      * @return srsName
      */
-    public static String toSRS(final CoordinateReferenceSystem crs, boolean simple){
+    public static String toSRS(final CoordinateReferenceSystem crs, boolean codeOnly){
         if( crs == null ) return null;
         String srsName = toSRS( crs );
-        if( simple && srsName != null ){
+        if( codeOnly && srsName != null ){
             // Some Server implementations using older versions of this
             // library barf on a fully qualified CRS name with messages
             // like : "couldnt decode SRS - EPSG:EPSG:4326. currently
@@ -1034,7 +1088,7 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
             if (!Citations.identifierMatches(factory.getAuthority(), authority)) {
                 continue;
             }
-            if (!(factory instanceof AbstractAuthorityFactory)) {
+            if (factory == null || !(factory instanceof AbstractAuthorityFactory)) {
                 continue;
             }
             final AbstractAuthorityFactory f = (AbstractAuthorityFactory) factory;
@@ -1171,7 +1225,8 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
      *
      * @since 2.5
      */
-    public static Envelope transform(Envelope envelope, final CoordinateReferenceSystem targetCRS)
+    public static GeneralEnvelope transform(Envelope envelope,
+            final CoordinateReferenceSystem targetCRS)
             throws TransformException
     {
         if (envelope != null && targetCRS != null) {
@@ -1197,7 +1252,7 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
                 assert equalsIgnoreMetadata(envelope.getCoordinateReferenceSystem(), targetCRS);
             }
         }
-        return envelope;
+        return GeneralEnvelope.toGeneralEnvelope(envelope);
     }
 
     /**
@@ -1291,20 +1346,22 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
             }
             /*
              * Get the next point's coordinates.  The 'coordinateNumber' variable should
-             * be seen as a number in base 3 where the number of digits is equals to the
+             * be seen as a number in base 5 where the number of digits is equals to the
              * number of dimensions. For example, a 4-D space would have numbers ranging
-             * from "0000" to "2222" (numbers in base 3). The digits are then translated
+             * from "0000" to "4444" (numbers in base 4). The digits are then translated
              * into minimal, central or maximal ordinates. The outer loop stops when the
              * counter roll back to "0000".  Note that 'targetPt' must keep the value of
              * the last projected point, which must be the envelope center identified by
-             * "2222" in the 4-D case.
+             * "4444" in the 4-D case.
              */
             int n = ++coordinateNumber;
             for (int i=sourceDim; --i>=0;) {
-                switch (n % 3) {
-                    case 0:  sourcePt.setOrdinate(i, envelope.getMinimum(i)); n /= 3; break;
+                switch (n % 5) {
+                    case 0:  sourcePt.setOrdinate(i, envelope.getMinimum(i)); n /= 5; break;
                     case 1:  sourcePt.setOrdinate(i, envelope.getMaximum(i)); continue loop;
-                    case 2:  sourcePt.setOrdinate(i, envelope.getMedian (i)); continue loop;
+                    case 2:  sourcePt.setOrdinate(i, (envelope.getMinimum(i) + envelope.getMedian (i)) / 2); continue loop;
+                    case 3:  sourcePt.setOrdinate(i, (envelope.getMedian (i) + envelope.getMaximum(i)) / 2); continue loop;
+                    case 4:  sourcePt.setOrdinate(i, envelope.getMedian (i)); continue loop;
                     default: throw new AssertionError(n); // Should never happen
                 }
             }
@@ -1394,13 +1451,86 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
                 }
             }
         }
+
+        // check the target CRSS
         /*
-         * Now takes the target CRS in account...
+         * Special case for polar stereographic, if the envelope contains the origin, then
+         * the whole set of longitudes should be included
          */
         final CoordinateReferenceSystem targetCRS = operation.getTargetCRS();
         if (targetCRS == null) {
             return transformed;
         }
+        GeneralEnvelope generalEnvelope = toGeneralEnvelope(envelope);
+        MapProjection sourceProjection = CRS.getMapProjection(sourceCRS);
+        if (sourceProjection instanceof PolarStereographic) {
+            PolarStereographic ps = (PolarStereographic) sourceProjection;
+            ParameterValue<?> fe = ps.getParameterValues().parameter(
+                    MapProjection.AbstractProvider.FALSE_EASTING.getName().getCode());
+            double originX = fe.doubleValue();
+            ParameterValue<?> fn = ps.getParameterValues().parameter(
+                    MapProjection.AbstractProvider.FALSE_NORTHING.getName().getCode());
+            double originY = fn.doubleValue();
+            DirectPosition2D origin = new DirectPosition2D(originX, originY);
+            if (generalEnvelope.contains(origin)) {
+                if (targetCRS instanceof GeographicCRS) {
+                    DirectPosition lowerCorner = transformed.getLowerCorner();
+                    if (getAxisOrder(targetCRS) == AxisOrder.NORTH_EAST) {
+                        lowerCorner.setOrdinate(1, -180);
+                        transformed.add(lowerCorner);
+                        lowerCorner.setOrdinate(1, 180);
+                        transformed.add(lowerCorner);
+                    } else {
+                        lowerCorner.setOrdinate(0, -180);
+                        transformed.add(lowerCorner);
+                        lowerCorner.setOrdinate(0, 180);
+                        transformed.add(lowerCorner);
+                    }
+                } else {
+                    // there is no guarantee that the whole range of longitudes will make
+                    // sense for the target projection. We do a 1deg sampling as a compromise
+                    // between
+                    // speed and accuracy
+                    DirectPosition lc = transformed.getLowerCorner();
+                    DirectPosition uc = transformed.getUpperCorner();
+                    for (int j = -180; j < 180; j++) {
+                        expandEnvelopeByLongitude(j, lc, transformed, targetCRS);
+                        expandEnvelopeByLongitude(j, uc, transformed, targetCRS);
+                    }
+
+                }
+            } else {
+                // check where the point closes to the origin is, make sure it's included
+                // in the tranformation points
+                if (generalEnvelope.getMinimum(0) < originX
+                        && generalEnvelope.getMaximum(0) > originX) {
+                    DirectPosition lc = generalEnvelope.getLowerCorner();
+                    lc.setOrdinate(0, originX);
+                    mt.transform(lc, lc);
+                    transformed.add(lc);
+                    DirectPosition uc = generalEnvelope.getUpperCorner();
+                    uc.setOrdinate(0, originX);
+                    mt.transform(uc, uc);
+                    transformed.add(uc);
+                }
+                if (generalEnvelope.getMinimum(1) < originY
+                        && generalEnvelope.getMaximum(1) > originY) {
+                    DirectPosition lc = generalEnvelope.getLowerCorner();
+                    lc.setOrdinate(1, originY);
+                    mt.transform(lc, lc);
+                    transformed.add(lc);
+                    DirectPosition uc = generalEnvelope.getUpperCorner();
+                    uc.setOrdinate(1, originY);
+                    mt.transform(uc, uc);
+                    transformed.add(uc);
+                }
+
+            }
+        }
+        
+        /*
+         * Now takes the target CRS in account...
+         */
         transformed.setCoordinateReferenceSystem(targetCRS);
         final CoordinateSystem targetCS = targetCRS.getCoordinateSystem();
         if (targetCS == null) {
@@ -1439,7 +1569,6 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
          * transformed envelope will be expanded to the full (-180 to 180) range. This is quite
          * large, but at least it is correct (while the envelope without expansion is not).
          */
-        GeneralEnvelope generalEnvelope = null;
         DirectPosition sourcePt = null;
         DirectPosition targetPt = null;
         final int dimension = targetCS.getDimension();
@@ -1483,13 +1612,6 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
                     for (int j=0; j<dimension; j++) {
                         targetPt.setOrdinate(j, centerPt.getOrdinate(j));
                     }
-                    // TODO: avoid the hack below if we provide a contains(DirectPosition)
-                    //       method in GeoAPI Envelope interface.
-                    if (envelope instanceof GeneralEnvelope) {
-                        generalEnvelope = (GeneralEnvelope) envelope;
-                    } else {
-                        generalEnvelope = new GeneralEnvelope(envelope);
-                    }
                 }
                 targetPt.setOrdinate(i, extremum);
                 try {
@@ -1511,6 +1633,36 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
             }
         }
         return transformed;
+    }
+
+    private static void expandEnvelopeByLongitude(double longitude, DirectPosition input,
+            GeneralEnvelope transformed, CoordinateReferenceSystem sourceCRS) {
+        try {
+            MathTransform mt = findMathTransform(sourceCRS,
+                    DefaultGeographicCRS.WGS84);
+            DirectPosition2D pos = new DirectPosition2D(sourceCRS);
+            mt.transform(input, pos);
+            pos.setOrdinate(0, longitude);
+            mt.inverse().transform(pos, pos);
+            transformed.add(pos);
+        } catch (Exception e) {
+            LOGGER.log(Level.FINER, "Tried to expand target envelope to include longitude "
+                    + longitude + " but failed. This is not necesseraly and issue, "
+                    + "this is a best effort attempt to handle the polar stereographic "
+                    + "pole singularity during reprojection", e);
+        }
+    }
+
+    private static GeneralEnvelope toGeneralEnvelope(final Envelope envelope) {
+        // TODO: avoid the hack below if we provide a contains(DirectPosition)
+        // method in GeoAPI Envelope interface.
+        GeneralEnvelope generalEnvelope;
+        if (envelope instanceof GeneralEnvelope) {
+            generalEnvelope = (GeneralEnvelope) envelope;
+        } else {
+            generalEnvelope = new GeneralEnvelope(envelope);
+        }
+        return generalEnvelope;
     }
 
     /**
@@ -1639,107 +1791,15 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
         if (envelope == null) {
             return null;
         }
-        final MathTransform transform = operation.getMathTransform();
-        if (!(transform instanceof MathTransform2D)) {
-            throw new MismatchedDimensionException(Errors.format(ErrorKeys.NO_TRANSFORM2D_AVAILABLE));
-        }
-        MathTransform2D mt = (MathTransform2D) transform;
-        final Point2D.Double center = new Point2D.Double();
-        destination = transform(mt, envelope, destination, center);
-        /*
-         * If the source envelope crosses the expected range of valid coordinates, also projects
-         * the range bounds as a safety. See the comments in transform(Envelope, ...).
-         */
-        final CoordinateReferenceSystem sourceCRS = operation.getSourceCRS();
-        if (sourceCRS != null) {
-            final CoordinateSystem cs = sourceCRS.getCoordinateSystem();
-            if (cs != null && cs.getDimension() == 2) { // Paranoiac check.
-                CoordinateSystemAxis axis = cs.getAxis(0);
-                double min = envelope.getMinX();
-                double max = envelope.getMaxX();
-                Point2D.Double pt = null;
-                for (int i=0; i<4; i++) {
-                    if (i == 2) {
-                        axis = cs.getAxis(1);
-                        min = envelope.getMinY();
-                        max = envelope.getMaxY();
-                    }
-                    final double v = (i & 1) == 0 ? axis.getMinimumValue() : axis.getMaximumValue();
-                    if (!(v > min && v < max)) {
-                        continue;
-                    }
-                    if (pt == null) {
-                        pt = new Point2D.Double();
-                    }
-                    if ((i & 2) == 0) {
-                        pt.x = v;
-                        pt.y = envelope.getCenterY();
-                    } else {
-                        pt.x = envelope.getCenterX();
-                        pt.y = v;
-                    }
-                    destination.add(mt.transform(pt, pt));
-                }
-            }
-        }
-        /*
-         * Now takes the target CRS in account...
-         */
-        final CoordinateReferenceSystem targetCRS = operation.getTargetCRS();
-        if (targetCRS == null) {
+
+        GeneralEnvelope result = transform(operation, new GeneralEnvelope(envelope));
+        if (destination == null) {
+            return result.toRectangle2D();
+        } else {
+            destination.setFrame(result.getMinimum(0), result.getMinimum(1), result.getSpan(0),
+                    result.getSpan(1));
             return destination;
         }
-        final CoordinateSystem targetCS = targetCRS.getCoordinateSystem();
-        if (targetCS == null || targetCS.getDimension() != 2) {
-            // It should be an error, but we keep this method tolerant.
-            return destination;
-        }
-        /*
-         * Checks for singularity points. See the transform(CoordinateOperation, Envelope)
-         * method for comments about the algorithm. The code below is the same algorithm
-         * adapted for the 2D case and the related objects (Point2D, Rectangle2D, etc.).
-         */
-        Point2D sourcePt = null;
-        Point2D targetPt = null;
-        for (int flag=0; flag<4; flag++) { // 2 dimensions and 2 extremums compacted in a flag.
-            final int i = flag >> 1; // The dimension index being examined.
-            final CoordinateSystemAxis axis = targetCS.getAxis(i);
-            if (axis == null) { // Should never be null, but check as a paranoiac safety.
-                continue;
-            }
-            final double extremum = (flag & 1) == 0 ? axis.getMinimumValue() : axis.getMaximumValue();
-            if (Double.isInfinite(extremum) || Double.isNaN(extremum)) {
-                continue;
-            }
-            if (targetPt == null) {
-                try {
-                    // TODO: remove the cast when we will be allowed to compile for J2SE 1.5.
-                    mt = mt.inverse();
-                } catch (NoninvertibleTransformException exception) {
-                    unexpectedException("transform", exception);
-                    return destination;
-                }
-                targetPt = new Point2D.Double();
-            }
-            switch (i) {
-                case 0: targetPt.setLocation(extremum, center.y); break;
-                case 1: targetPt.setLocation(center.x, extremum); break;
-                default: throw new AssertionError(flag);
-            }
-            try {
-                sourcePt = mt.transform(targetPt, sourcePt);
-            } catch (TransformException e) {
-                // Do not log; this exception is often expected here.
-                continue;
-            }
-            if (envelope.contains(sourcePt)) {
-                destination.add(targetPt);
-            }
-        }
-        // Attempt the 'equalsEpsilon' assertion only if source and destination are not same.
-        assert (destination == envelope) || XRectangle2D.equalsEpsilon(destination,
-                transform(operation, new GeneralEnvelope(envelope)).toRectangle2D()) : destination;
-        return destination;
     }
 
     /**
@@ -1780,6 +1840,7 @@ search:             if (DefaultCoordinateSystemAxis.isCompassDirection(axis.getD
                 MapProjection.resetWarnings();
             }
         }
+        FORCED_LON_LAT = null;
         defaultFactory = null;
         xyFactory = null;
         strictFactory = null;

@@ -7,13 +7,9 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
-import java.awt.image.WritableRaster;
 
 import javax.media.jai.widget.ScrollingImagePanel;
-import javax.swing.BorderFactory;
-import javax.swing.JApplet;
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -30,8 +26,16 @@ class CompareImageDialog extends JDialog {
         JPanel content = new JPanel(new BorderLayout());
         this.setContentPane(content);
         this.setTitle("ImageAssert");
+        String message;
+        if (expected.getWidth() != actual.getWidth() || expected.getHeight() != actual.getHeight()) {
+            message = "Image sizes are different, expected " + expected.getWidth() + "x"
+                    + expected.getHeight() + " but actual is " + actual.getWidth() + "x"
+                    + actual.getHeight();
+        } else {
+            message = "The two images are perceptibly different.";
+        }
         final JLabel topLabel = new JLabel(
-                "<html><body>PerceptualDiff thinks the two images are perceptibly different.</html></body>");
+                "<html><body>" + message + "</html></body>");
         topLabel.setBorder(new EmptyBorder(4, 4, 4, 4));
         content.add(topLabel, BorderLayout.NORTH);
 

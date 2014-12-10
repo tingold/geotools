@@ -24,15 +24,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 
 import org.eclipse.xsd.XSDElementDeclaration;
 import org.geotools.feature.NameImpl;
-import org.geotools.geometry.DirectPosition2D;
+import org.geotools.geometry.jts.LiteCoordinateSequence;
+import org.geotools.geometry.jts.SingleCurvedGeometry;
+import org.geotools.gml2.SrsSyntax;
 import org.geotools.gml2.bindings.GML2EncodingUtils;
 import org.geotools.gml2.bindings.GMLEncodingUtils;
-//import org.geotools.gml3.GML;
 import org.geotools.gml3.GML;
 import org.geotools.gml3.XSDIdRegistry;
 import org.geotools.util.Converters;
@@ -47,7 +47,6 @@ import org.opengis.feature.Property;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.type.Name;
 import org.opengis.filter.identity.FeatureId;
-import org.opengis.geometry.DirectPosition;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -87,29 +86,22 @@ public class GML3EncodingUtils {
         e = new GMLEncodingUtils(gml);
     }
 
-    static DirectPosition[] positions(LineString line) {
-        CoordinateSequence coordinates = line.getCoordinateSequence();
-        DirectPosition[] dps = new DirectPosition[coordinates.size()];
-
-        double x;
-        double y;
-
-        for (int i = 0; i < dps.length; i++) {
-            x = coordinates.getOrdinate(i, 0);
-            y = coordinates.getOrdinate(i, 1);
-            dps[i] = new DirectPosition2D(x, y);
+    static CoordinateSequence positions(LineString line) {
+        if (line instanceof SingleCurvedGeometry<?>) {
+            SingleCurvedGeometry<?> curved = (SingleCurvedGeometry<?>) line;
+            return new LiteCoordinateSequence(curved.getControlPoints());
+        } else {
+            return line.getCoordinateSequence();
         }
-
-        return dps;
     }
 
-    static URI toURI(CoordinateReferenceSystem crs) {
+    static URI toURI(CoordinateReferenceSystem crs, SrsSyntax srsSyntax) {
         if (crs == null) {
             return null;
         }
 
         try {
-            String crsCode = GML2EncodingUtils.crs(crs);
+            String crsCode = GML2EncodingUtils.toURI(crs, srsSyntax);
 
             if (crsCode != null) {
                 return new URI(crsCode);
@@ -121,27 +113,88 @@ public class GML3EncodingUtils {
         }
     }
 
-    /**
-     * @deprecated use {@link #toURI(CoordinateReferenceSystem)}.
-     */
-    static URI crs(CoordinateReferenceSystem crs) {
-        return toURI(crs);
-    }
-
     static CoordinateReferenceSystem getCRS(Geometry g) {
         return GML2EncodingUtils.getCRS(g);
     }
+    
+    /**
+     * Get uomLabels for the geometry if set in app-schema mapping configuration.
+     */
+    public static String getUomLabels(Geometry g) {
+        Object userData = g.getUserData();
+        if (userData != null && userData instanceof Map) {
+            Object attributes = ((Map) userData).get(Attributes.class);
+            if (attributes != null && attributes instanceof Map) {
+                Name attribute = new NameImpl("uomLabels");
+                Object uomLabels = ((Map) attributes).get(attribute);
+                if (uomLabels != null) {
+                    return uomLabels.toString();
+                }
+            }
+        }
+        return null;
+    }
 
-    static String getID(Geometry g) {
+    /**
+     * Get axisLabels for the geometry if set in app-schema mapping configuration.
+     */
+    public static String getAxisLabels(Geometry g) {
+        Object userData = g.getUserData();
+        if (userData != null && userData instanceof Map) {
+            Object attributes = ((Map) userData).get(Attributes.class);
+            if (attributes != null && attributes instanceof Map) {
+                Name attribute = new NameImpl("axisLabels");
+                Object axisLabels = ((Map) attributes).get(attribute);
+                if (axisLabels != null) {
+                    return axisLabels.toString();
+                }
+            }
+        }
+        return null;
+    }
+
+    public static String getID(Geometry g) {
         return GML2EncodingUtils.getID(g);
+    }
+
+    static void setID(Geometry g, String id) {
+        GML2EncodingUtils.setID(g, id);
     }
 
     static String getName(Geometry g) {
         return GML2EncodingUtils.getName(g);
     }
 
+    static void setName(Geometry g, String name) {
+        GML2EncodingUtils.setName(g, name);
+    }
+
     static String getDescription(Geometry g) {
         return GML2EncodingUtils.getDescription(g);
+    }
+
+    static void setDescription(Geometry g, String description) {
+        GML2EncodingUtils.setDescription(g, description);
+    }
+    
+    /**
+     * Set a synthetic gml:id on each child of a multigeometry. If the multigeometry has no gml:id,
+     * this method has no effect. The synthetic gml:id of each child is constructed from that of the
+     * parent by appending "." and then an integer starting from one for the first child.
+     * 
+     * @param multiGeometry
+     *            parent multigeometry containing the children to be modified
+     */
+    static void setChildIDs(Geometry multiGeometry) {
+        String id = getID(multiGeometry);
+        if (id != null) {
+            for (int i = 0; i < multiGeometry.getNumGeometries(); i++) {
+                StringBuilder builder = new StringBuilder(id);
+                builder.append(".");  // separator
+                builder.append(i + 1);  // synthetic gml:id suffix one-based
+                GML2EncodingUtils.setID(multiGeometry.getGeometryN(i), builder.toString());
+            }
+        }
     }
 
     /**
@@ -240,7 +293,7 @@ public class GML3EncodingUtils {
             }
             encoding.setAttributeNS(gml.getNamespaceURI(), "id", id);
         }
-        encodeClientProperties(feature, value);
+        encodeClientProperties(feature, encoding);
 
         return encoding;
     }

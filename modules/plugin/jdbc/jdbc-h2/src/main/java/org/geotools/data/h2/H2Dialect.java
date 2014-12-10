@@ -265,7 +265,8 @@ public class H2Dialect extends SQLDialect {
             return;
         }
         String idxTableName = featureType.getTypeName() + "_HATBOX";
-        ResultSet rs = metadata.getTables(null, schemaName, idxTableName, new String[]{"TABLE"});
+        ResultSet rs = metadata.getTables(null, dataStore.escapeNamePattern(metadata, schemaName),
+                dataStore.escapeNamePattern(metadata, idxTableName), new String[]{"TABLE"});
         try {
             if (rs.next()) {
                 featureType.getGeometryDescriptor().getUserData().put(H2_SPATIAL_INDEX, idxTableName);
@@ -275,7 +276,56 @@ public class H2Dialect extends SQLDialect {
             dataStore.closeSafe(rs);
         }
     }
-    
+
+    @Override
+    public void preDropTable(String schemaName, SimpleFeatureType featureType, Connection cx)
+            throws SQLException {
+        String tableName = featureType.getTypeName();
+        Statement st = cx.createStatement();
+
+        try {
+            //drop the spatial index
+            StringBuffer sql = new StringBuffer();
+            sql.append("CALL DropSpatialIndex(");
+            if (schemaName == null) {
+                sql.append("NULL");
+            }
+            else {
+                sql.append("'").append(schemaName).append("'");
+            }
+
+            sql.append(",'").append(tableName).append("')");
+            LOGGER.fine(sql.toString());
+
+            try {
+                st.execute(sql.toString());
+            }
+            catch(SQLException e) {
+                //table may not have had a spatial index
+                //TODO: do a better check
+                LOGGER.log(Level.FINE, e.getLocalizedMessage(), e);
+            }
+
+            //remove the geometry metadata
+            sql = new StringBuffer();
+            sql.append("CALL DropGeometryColumns(");
+            if (schemaName == null) {
+                sql.append("NULL");
+            }
+            else {
+                sql.append("'").append(schemaName).append("'");
+            }
+
+            sql.append(",'").append(tableName).append("')");
+            LOGGER.fine(sql.toString());
+
+            st.execute(sql.toString());
+        }
+        finally {
+            dataStore.closeSafe(st);
+        }
+    }
+
     boolean isConcreteGeometry( Class binding ) {
         return Point.class.isAssignableFrom(binding) 
             || LineString.class.isAssignableFrom(binding)
@@ -349,11 +399,15 @@ public class H2Dialect extends SQLDialect {
 
     public void encodeGeometryValue(Geometry value, int srid, StringBuffer sql)
         throws IOException {
-        sql.append("ST_GeomFromText ('");
-        sql.append(new WKTWriter().write(value));
-        sql.append("',");
-        sql.append(srid);
-        sql.append(")");
+        if(value == null || value.isEmpty()) {
+            sql.append("ST_GeomFromText ('");
+            sql.append(new WKTWriter().write(value));
+            sql.append("',");
+            sql.append(srid);
+            sql.append(")");
+        } else {
+            sql.append("NULL");
+        }
     }
     
     

@@ -38,17 +38,44 @@ import com.vividsolutions.jts.geom.Envelope;
  */
 public class RenderUtilitiesTest extends TestCase {
 
-	public void testScaleOutsideCrsDefinition() throws Exception {
-		CoordinateReferenceSystem utm1N = CRS.decode("EPSG:32601");
-		ReferencedEnvelope re = new ReferencedEnvelope(new Envelope(0, 0, 100,
-				100), utm1N);
-		try {
-			RendererUtilities.calculateScale(re, 100, 100, 75);
-			fail("Should have failed, envelope outside of the source crs validity area");
-		} catch (IllegalArgumentException e) {
-			// ok
-		}
-	}
+    /**
+     * This tests a fix to handle Geographic CRSes (such as NAD83)
+     * whose domain of validity crosses the Date Line.
+     * Previously this would cause a failure.
+     * 
+     * @throws Exception
+     */
+    public void testNAD83() throws Exception {
+        CoordinateReferenceSystem nad83 = CRS.decode("EPSG:4269", true);
+        ReferencedEnvelope re = new ReferencedEnvelope(
+                new Envelope(-121.1, -121.0, 46.7, 46.8), nad83);
+        double scale = RendererUtilities.calculateScale(re, 750, 600, 75);
+        assertEquals(41470, scale, 1d); 
+    }
+
+    public void testWGS84() throws Exception {
+        CoordinateReferenceSystem wgs84 = CRS.decode("EPSG:4326", true);
+        ReferencedEnvelope re = new ReferencedEnvelope(
+                new Envelope(-121.1, -121.0, 46.7, 46.8), wgs84);
+        double scale = RendererUtilities.calculateScale(re, 750, 600, 75);
+        assertEquals(41470, scale, 1d); 
+    }
+    
+    public void testWorld() throws Exception {
+        CoordinateReferenceSystem wgs84 = CRS.decode("EPSG:4326", true);
+        ReferencedEnvelope re = new ReferencedEnvelope(
+                new Envelope(-180, 180, -90, 90), wgs84);
+        double scale = RendererUtilities.calculateScale(re, 1000, 500, 75);
+        assertEquals(52830886, scale, 1);
+    }
+    
+    public void testWorldTwice() throws Exception {
+        CoordinateReferenceSystem wgs84 = CRS.decode("EPSG:4326", true);
+        ReferencedEnvelope re = new ReferencedEnvelope(
+                new Envelope(-360, 360, -180, 180), wgs84);
+        double scale = RendererUtilities.calculateScale(re, 1000, 500, 75);
+        assertEquals(52830886 * 2, scale, 1);
+    }
 
 	public void testScaleProjected() throws Exception {
 		CoordinateReferenceSystem utm1N = CRS.decode("EPSG:32601");
@@ -72,6 +99,13 @@ public class RenderUtilitiesTest extends TestCase {
 		double scale = RendererUtilities.calculateScale(re, 10 * 100, 10 * 100, 2.54);
 		assertEquals(1.0, scale, 0.00001); // no projection deformation here!
 	}
+	
+    public void testScaleGenericFeet() throws Exception {
+        ReferencedEnvelope re = new ReferencedEnvelope(new Envelope(1587500, 1587510, 475000, 475010),
+                CRS.decode("EPSG:2927", true));
+        double scale = RendererUtilities.calculateScale(re, 10 * 100, 10 * 100, 2.54);
+        assertEquals(0.30564, scale, 0.00001); // includes some projection deformation
+    }
     
     public void testOGCScaleProjected() throws Exception {
         ReferencedEnvelope re = new ReferencedEnvelope(new Envelope(0, 10,
@@ -80,6 +114,25 @@ public class RenderUtilitiesTest extends TestCase {
         double scale = RendererUtilities.calculateOGCScale(re, tenMetersPixels , new HashMap());
         assertEquals(1.0, scale, 0.0001);
     }
+    
+    public void testOGCScaleFeet() throws Exception {
+        try {
+            ReferencedEnvelope re = new ReferencedEnvelope(new Envelope(0, 10,
+                    0, 10), CRS.decode("EPSG:2927", true));
+            int tenMetersPixels = (int) Math.round(10 / 0.00028);
+
+            RendererUtilities.SCALE_UNIT_COMPENSATION = false;
+            double scale = RendererUtilities.calculateOGCScale(re, tenMetersPixels , new HashMap());
+            assertEquals(1, scale, 0.0001);
+
+            RendererUtilities.SCALE_UNIT_COMPENSATION = true;
+            scale = RendererUtilities.calculateOGCScale(re, tenMetersPixels , new HashMap());
+            assertEquals(0.304803, scale, 0.0001);
+        } finally {
+            RendererUtilities.SCALE_UNIT_COMPENSATION = true;
+        }
+    }
+
     
     public void testOGCScaleGeographic() throws Exception {
         // same example as page 29 in the SLD OGC spec, but with the expected scale corrected

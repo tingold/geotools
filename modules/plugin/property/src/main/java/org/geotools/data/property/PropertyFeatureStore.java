@@ -2,7 +2,7 @@
  *    GeoTools - The Open Source Java GIS Toolkit
  *    http://geotools.org
  *
- *    (C) 2002-2008, Open Source Geospatial Foundation (OSGeo)
+ *    (C) 2002-2014, Open Source Geospatial Foundation (OSGeo)
  *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
@@ -17,12 +17,10 @@
 package org.geotools.data.property;
 
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.LineNumberReader;
+import java.util.Collections;
 
 import org.geotools.data.AbstractFeatureLocking;
-import org.geotools.data.DataStore;
 import org.geotools.data.FeatureEvent;
 import org.geotools.data.FeatureListener;
 import org.geotools.data.Query;
@@ -30,11 +28,12 @@ import org.geotools.data.QueryCapabilities;
 import org.geotools.data.Transaction;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
-import org.geotools.feature.FeatureCollection;
+import org.geotools.factory.Hints;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.filter.Filter;
+import org.opengis.geometry.BoundingBox;
 
 /**
  * Implementation used for writeable property files.
@@ -67,6 +66,7 @@ public class PropertyFeatureStore extends AbstractFeatureLocking {
     };
     
     PropertyFeatureStore( PropertyDataStore propertyDataStore, String typeName ) throws IOException{
+        super(Collections.singleton(Hints.FEATURE_DETACHED));
         this.store = propertyDataStore;
         this.typeName = typeName;
         this.featureType = store.getSchema( typeName );
@@ -101,13 +101,17 @@ public class PropertyFeatureStore extends AbstractFeatureLocking {
     // getCount start
     public int getCount(Query query) throws IOException {
         if( Filter.INCLUDE == query.getFilter() && getTransaction() == Transaction.AUTO_COMMIT ){
-            File file = new File( store.directory, typeName+".properties" );            
-            if( cacheCount != -1 && file.lastModified() == cacheTimestamp){
+            File file = new File( store.directory, typeName+".properties" );
+            if(!(cacheCount != -1 && file.lastModified() == cacheTimestamp)) {
+                cacheCount = PropertyDataStore.countFile(file);
+                cacheTimestamp = file.lastModified();
+            }
+            
+            if(query.getMaxFeatures() >= 0) {
+                return Math.min(cacheCount, query.getMaxFeatures());
+            } else {
                 return cacheCount;
             }
-            cacheCount = PropertyDataStore.countFile(file);
-            cacheTimestamp = file.lastModified();
-            return cacheCount;
         }
         return -1;
         // return super.getCount(query); // super class checks transaction state diff
@@ -127,13 +131,15 @@ public class PropertyFeatureStore extends AbstractFeatureLocking {
     ReferencedEnvelope getBoundsInternal(Query query) throws IOException {
         SimpleFeatureCollection fc = getFeatures(query);
         SimpleFeatureIterator fi = null;
-        ReferencedEnvelope result = new ReferencedEnvelope(getSchema().getCoordinateReferenceSystem());
+        ReferencedEnvelope result = ReferencedEnvelope.create(getSchema().getCoordinateReferenceSystem());
         try {
             fi = fc.features();
             while(fi.hasNext()) {
                 SimpleFeature f = fi.next();
-                if(f != null && f.getBounds() != null) {
-                    result.expandToInclude(ReferencedEnvelope.reference(f.getBounds()));
+                BoundingBox featureBoundingBox = f.getBounds();
+                if(f != null && featureBoundingBox != null) {
+                    ReferencedEnvelope featureBounds = ReferencedEnvelope.reference(featureBoundingBox);
+                    result.expandToInclude(featureBounds);
                 }
             }
         } catch(Exception e) {

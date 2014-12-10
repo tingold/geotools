@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Map;
 
+import org.geotools.factory.Hints;
 import org.geotools.jdbc.JDBCDataStore;
 import org.geotools.jdbc.PreparedStatementSQLDialect;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -95,6 +96,13 @@ public class MySQLDialectPrepared extends PreparedStatementSQLDialect {
             StringBuffer sql) {
         delegate.encodeGeometryColumn(gatt, prefix, srid, sql);
     }
+
+    @Override
+    public void encodeGeometryColumn(GeometryDescriptor gatt, String prefix,
+            int srid, Hints hints, StringBuffer sql) {
+        delegate.encodeGeometryColumn(gatt, prefix, srid, hints, sql);
+    }
+    
 
     @Override
     public void registerClassToSqlMappings(Map<Class<?>, Integer> mappings) {
@@ -179,22 +187,22 @@ public class MySQLDialectPrepared extends PreparedStatementSQLDialect {
     // prepared statement api
     //
     @Override
-    public void prepareGeometryValue(Geometry g, int srid, Class binding,
+    public void prepareGeometryValue(Geometry g, int dimension, int srid, Class binding,
             StringBuffer sql) {
         if ( g != null ) {
             sql.append( "GeomFromWKB(?)");
             //sql.append( "GeomFromText(?)");            
         }
         else {
-            super.prepareGeometryValue(g, srid, binding, sql);
+            super.prepareGeometryValue(g, dimension, srid, binding, sql);
         }
     }
     
     @Override
-    public void setGeometryValue(Geometry g, int srid, Class binding,
+    public void setGeometryValue(Geometry g, int dimension, int srid, Class binding,
             PreparedStatement ps, int column) throws SQLException {
         if ( g != null ) {
-            ps.setBytes( column, new WKBWriter().write( g ) );
+            ps.setBytes( column, new WKBWriter(dimension).write( g ) );
             //ps.setString( column, g.toText() );
         }
         else {

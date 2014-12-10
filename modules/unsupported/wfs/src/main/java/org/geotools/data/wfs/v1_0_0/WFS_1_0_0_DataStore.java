@@ -65,12 +65,6 @@ import org.geotools.data.wfs.v1_0_0.gml.WFSFeatureTypeTransformer;
 import org.geotools.data.wfs.v1_0_0.xml.WFSSchema;
 import org.geotools.feature.SchemaException;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
-import org.geotools.filter.ExpressionType;
-import org.geotools.filter.FidFilter;
-import org.geotools.filter.FilterType;
-import org.geotools.filter.Filters;
-import org.geotools.filter.GeometryFilter;
-import org.geotools.filter.LiteralExpression;
 import org.geotools.filter.visitor.DuplicatingFilterVisitor;
 import org.geotools.filter.visitor.PostPreProcessFilterSplittingVisitor;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -579,6 +573,15 @@ public class WFS_1_0_0_DataStore extends AbstractDataStore implements WFSDataSto
                     String encode = URLEncoder.encode(print,protocolHandler.getEncoding());
                     url += "&FILTER=" + encode;
                 }
+                
+                // inject vendor params, if any
+                if(request.getHints() != null && request.getHints().get(WFSDataStore.WFS_VENDOR_PARAMETERS) != null) {
+                    Map<String, String> vendorParams = (Map<String, String>) request.getHints().get(WFSDataStore.WFS_VENDOR_PARAMETERS);
+                    for (Map.Entry<String, String> entry : vendorParams.entrySet()) {
+                        url += "&" + entry.getKey() + "=" + URLEncoder.encode(entry.getValue(), protocolHandler
+                                .getEncoding());
+                    }
+                }
             }
         }
 
@@ -729,6 +732,30 @@ public class WFS_1_0_0_DataStore extends AbstractDataStore implements WFSDataSto
 
         if (postUrl == null) {
             return null;
+        }
+
+        // inject vendor params, if any
+        if(query != null && query.getHints() != null && query.getHints().get(WFSDataStore.WFS_VENDOR_PARAMETERS) != null) {
+            String url = postUrl.toString();
+            if ((url == null) || !url.endsWith("?")) {
+                url += "?";
+            }
+            
+            boolean first = true;
+            if(query.getHints() != null && query.getHints().get(WFSDataStore.WFS_VENDOR_PARAMETERS) != null) {
+                Map<String, String> vendorParams = (Map<String, String>) query.getHints().get(WFSDataStore.WFS_VENDOR_PARAMETERS);
+                for (Map.Entry<String, String> entry : vendorParams.entrySet()) {
+                    if(first) {
+                        first = false;
+                    } else {
+                        url += "&";
+                    }
+                    url += entry.getKey() + "=" + URLEncoder.encode(entry.getValue(), protocolHandler
+                            .getEncoding());
+                }
+            }
+            
+            postUrl = new URL(url);
         }
 
         HttpURLConnection hc = protocolHandler.getConnectionFactory().getConnection(postUrl, POST);
@@ -912,8 +939,7 @@ public class WFS_1_0_0_DataStore extends AbstractDataStore implements WFSDataSto
     }
 
     /**
-     * @see org.geotools.data.AbstractDataStore#getUnsupportedFilter(java.lang.String,
-     *      org.geotools.filter.Filter)
+     * @see org.geotools.data.AbstractDataStore#getUnsupportedFilter(String,Filter)
      */
     protected Filter getUnsupportedFilter(String typeName, Filter filter) {
         try {
@@ -1122,5 +1148,21 @@ public class WFS_1_0_0_DataStore extends AbstractDataStore implements WFSDataSto
      */
     public void setNamespaceOverride(String namespaceOverride) {
         this.namespaceOverride = namespaceOverride;
+    }
+
+    @Override
+    public void setUseDefaultSRS(Boolean useDefaultSRS) {
+        throw new UnsupportedOperationException(
+                "Not used, this class needs to be adapted to the new architecture in the wfs.v_1_1_0 package");
+    }
+
+    @Override
+    public void removeSchema(String typeName) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void removeSchema(Name typeName) throws IOException {
+        throw new UnsupportedOperationException();
     }
 }

@@ -34,17 +34,17 @@ import org.opengis.filter.Filter;
 /**
  * Transaction state responsible for holding an in memory {@link Diff} of any modifications.
  */
-class DiffTransactionState implements Transaction.State {
-    Diff diff;
+public class DiffTransactionState implements Transaction.State {
+    protected Diff diff;
     
     /** The transaction (ie session) associated with this state */
-    Transaction transaction;
+    protected Transaction transaction;
 
     /**
      * ContentState for this transaction used to hold information for
      * FeatureReader implementations
      */
-    ContentState state;
+    protected ContentState state;
 
     /**
      * Transaction state responsible for holding an in memory {@link Diff}.
@@ -55,6 +55,17 @@ class DiffTransactionState implements Transaction.State {
         this.state = state;
         this.diff = new Diff();
     }
+    
+    /**
+     * Transaction state responsible for holding an in memory {@link Diff}.
+     * 
+     * @param state ContentState for the transaction
+     */
+    protected DiffTransactionState(ContentState state, Diff diff ) {
+        this.state = state;
+        this.diff = diff;
+    }
+    
     /**
      * Access the in memory Diff.
      * @return in memory diff.
@@ -71,6 +82,10 @@ class DiffTransactionState implements Transaction.State {
      * the transaction is correct.
      */
     public synchronized void setTransaction(Transaction transaction) {
+        if (this.transaction != null && transaction == null) {
+            // clear ContentEntry transaction to fix GEOT-3315
+            state.getEntry().clearTransaction(this.transaction);
+        }
         this.transaction = transaction;
     }
 
@@ -138,17 +153,11 @@ class DiffTransactionState implements Transaction.State {
                     if (update == TransactionStateDiff.NULL) {
                         writer.remove();
 
-                        // notify
-                        state.fireFeatureRemoved(store, feature);
                     } else {
                         try {
                             feature.setAttributes(update.getAttributes());
                             writer.write();
 
-                            // notify
-                            ReferencedEnvelope bounds = ReferencedEnvelope.reference(feature
-                                    .getBounds());
-                            state.fireFeatureUpdated(store, update, bounds);
                         } catch (IllegalAttributeException e) {
                             throw new DataSourceException("Could update " + fid, e);
                         }
@@ -184,8 +193,6 @@ class DiffTransactionState implements Transaction.State {
                             // }
                             writer.write();
 
-                            // notify
-                            state.fireFeatureAdded(store, nextFeature);
                         } catch (IllegalAttributeException e) {
                             throw new DataSourceException("Could update " + fid, e);
                         }

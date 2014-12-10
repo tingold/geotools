@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -33,7 +34,7 @@ import java.util.logging.Logger;
 
 import org.geotools.factory.Hints;
 import org.geotools.util.logging.Logging;
-import org.hsqldb.jdbc.jdbcDataSource;
+import org.hsqldb.jdbc.JDBCDataSource;
 import org.opengis.referencing.FactoryException;
 
 
@@ -95,7 +96,7 @@ public class HsqlEpsgDatabase {
         }
     }
     public static javax.sql.DataSource createDataSource(File directory) throws SQLException {
-        jdbcDataSource dataSource = new jdbcDataSource();
+        JDBCDataSource dataSource = new JDBCDataSource();
         /*
          * Constructs the full path to the HSQL database. Note: we do not use
          * File.toURI() because HSQL doesn't seem to expect an encoded URL (e.g.
@@ -266,8 +267,9 @@ public class HsqlEpsgDatabase {
      * HSQL and not yet populated.
      */
     static boolean dataExists(final Connection connection) throws SQLException {
-        final ResultSet tables = connection.getMetaData().getTables(null, null,
-                        "EPSG_%", new String[] { "TABLE" });
+        final DatabaseMetaData metaData = connection.getMetaData();
+        final ResultSet tables = metaData.getTables(null, null,
+                "EPSG" + metaData.getSearchStringEscape() + "_%", new String[]{"TABLE"});
         final boolean exists = tables.next();
         tables.close();
         return exists;

@@ -18,18 +18,44 @@ package org.geotools.wfs.v1_0;
 
 import java.util.Set;
 
+import javax.xml.namespace.QName;
+
 import org.geotools.filter.v1_0.OGC;
 
 /**
- * XSD for wfs 1.0.
+ * XSD for wfs 1.0; except for WFS 1.0 capabilities document, for which {@link WFSCapabilities}
+ * shall be used, as its based on a different schema.
  * 
  * @author Justin Deoliveira, OpenGEO
- *
- *
- *
+ * 
+ * 
+ * 
  * @source $URL$
  */
 public final class WFS extends org.geotools.wfs.WFS {
+        
+    /** @generated */
+    public static final QName WFS_TransactionResponseType = new QName("http://www.opengis.net/wfs",
+            "WFS_TransactionResponseType");
+    
+    /** @generated */
+    public static final QName WFS_TransactionResponse = new QName("http://www.opengis.net/wfs",
+            "WFS_TransactionResponse");
+    
+    /** @generated */
+    public static final QName WFS_LockFeatureResponseType = new QName("http://www.opengis.net/wfs",
+            "WFS_LockFeatureResponseType");
+    
+    /** @generated */
+    public static final QName WFS_LockFeatureResponse = new QName("http://www.opengis.net/wfs",
+            "WFS_LockFeatureResponse");
+    
+    /** @generated */
+    public static final QName InsertResultType = new QName("http://www.opengis.net/wfs",
+            "InsertResultType");
+
+    public static final QName TransactionResultType = new QName("http://www.opengis.net/wfs",
+            "TransactionResultType");
 
     /** singleton instance */
     private static final WFS instance = new WFS();
@@ -41,6 +67,7 @@ public final class WFS extends org.geotools.wfs.WFS {
         return instance;
     }
 
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     @Override
     protected void addDependencies(Set dependencies) {
         dependencies.add( OGC.getInstance() );

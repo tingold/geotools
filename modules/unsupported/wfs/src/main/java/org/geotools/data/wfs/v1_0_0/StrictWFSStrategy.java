@@ -28,7 +28,6 @@ import org.geotools.data.FilteringFeatureReader;
 import org.geotools.data.Query;
 import org.geotools.data.Transaction;
 import org.geotools.filter.FilterAttributeExtractor;
-import org.geotools.filter.Filters;
 import org.geotools.filter.visitor.FixBBOXFilterVisitor;
 import org.geotools.geometry.jts.JTS;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -75,7 +74,7 @@ class StrictWFSStrategy extends NonStrictWFSStrategy {
 
     protected  FeatureReader<SimpleFeatureType, SimpleFeature> wrapWithFilteringFeatureReader(Filter postFilter,  FeatureReader<SimpleFeatureType, SimpleFeature> reader, Filter processedFilter) {
         FilterEncodingPreProcessor visitor = new FilterEncodingPreProcessor(COMPLIANCE_LEVEL);
-        Filters.accept( processedFilter, visitor);
+        processedFilter.accept(visitor, null);
         
         if( visitor.requiresPostProcessing() )
             return new FilteringFeatureReader<SimpleFeatureType, SimpleFeature>(reader, processedFilter);
@@ -152,18 +151,19 @@ class StrictWFSStrategy extends NonStrictWFSStrategy {
 
         protected void init( Transaction transaction, Query query, Integer level ) throws IOException {
             FilterEncodingPreProcessor visitor = new FilterEncodingPreProcessor(level);
-            Filters.accept( query.getFilter(), visitor );
+            query.getFilter().accept(visitor,null);
             
             this.transaction=transaction;
             if( visitor.requiresPostProcessing() && query.getPropertyNames()!=Query.ALL_NAMES){
                 FilterAttributeExtractor attributeExtractor=new FilterAttributeExtractor();
                 query.getFilter().accept( attributeExtractor, null );
-                Set<String> properties=new HashSet<String>(attributeExtractor.getAttributeNameSet());
+                Set<String> properties = new HashSet<String>(attributeExtractor.getAttributeNameSet());
                 properties.addAll(Arrays.asList(query.getPropertyNames()));
-                this.query=new Query(query.getTypeName(), query.getFilter(), query.getMaxFeatures(),
-                        (String[]) properties.toArray(new String[0]), query.getHandle());
-            }else
+                this.query = new Query(query);
+                this.query.setPropertyNames((String[]) properties.toArray(new String[0]));
+            } else {
                 this.query=query;
+            }
             
             this.filter=visitor.getFilter();
 

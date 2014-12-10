@@ -18,18 +18,31 @@
 package org.geotools.data.wfs.v1_1_0;
 
 import static org.geotools.data.wfs.v1_1_0.DataTestSupport.GEOS_STATES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.net.URL;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
+import org.geotools.data.FeatureReader;
 import org.geotools.data.Query;
+import org.geotools.data.Transaction;
+import org.geotools.data.ows.HTTPResponse;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.data.simple.SimpleFeatureSource;
+import org.geotools.data.wfs.WFSDataStore;
+import org.geotools.data.wfs.WFSDataStoreFactory;
+import org.geotools.data.wfs.protocol.http.HttpUtil;
 import org.geotools.factory.CommonFactoryFinder;
+import org.geotools.factory.Hints;
 import org.junit.Test;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -98,5 +111,73 @@ public class GeoServerOnlineTest extends AbstractWfsDataStoreOnlineTest {
             iterator.close();
         }
     }
+    
+    @Test
+    public void testVendorParametersGet() throws Exception {
+        testVendorParameters(Boolean.FALSE);
+    }
+    
+    @Test
+    public void testVendorParametersPost() throws Exception {
+        testVendorParameters(Boolean.TRUE);
+    }
+
+    private void testVendorParameters(Boolean usePost) throws IOException {
+        if (Boolean.FALSE.equals(serviceAvailable)) {
+            return;
+        }
+        
+        // we alter the data store, thus we cannot use the static "wfs" field, we need to create a new one
+        Map<String, Serializable> params = new HashMap<String, Serializable>();
+        params.put(WFSDataStoreFactory.URL.key, SERVER_URL);
+        params.put(WFSDataStoreFactory.PROTOCOL.key, usePost);
+        params.put("USE_PULL_PARSER", Boolean.TRUE);
+        WFSDataStoreFactory dataStoreFactory = new WFSDataStoreFactory();
+        WFSDataStore wfs = dataStoreFactory.createDataStore(params);
+        
+        final WFS_1_1_0_Protocol originalHandler = (WFS_1_1_0_Protocol) ((WFS_1_1_0_DataStore) wfs).wfs;
+        originalHandler.http = new HttpProtocolWrapper(originalHandler.http) {
+            
+            @Override
+            public HTTPResponse get(URL url) throws IOException {
+                // check the vendor params actually made it into the url (at this stage they are not url encoded)
+                Map<String, String> kvp = HttpUtil.requestKvp(url);
+                assertEquals("true", kvp.get("strict"));
+                assertEquals("mysecret", kvp.get("authkey"));
+                assertEquals("low:2000000;high:5000000", kvp.get("viewparams"));
+                
+                return super.get(url);
+            }
+            
+            @Override
+            public HTTPResponse post(URL url, InputStream postContent, String postContentType)
+                    throws IOException {
+                Map<String, String> kvp = HttpUtil.requestKvp(url);
+                
+                // check the vendor params actually made it into the url
+                assertEquals("true", kvp.get("strict"));
+                assertEquals("mysecret", kvp.get("authkey"));
+                assertEquals("low%3A2000000%3Bhigh%3A5000000", kvp.get("viewparams"));
+                
+                return super.post(url, postContent, postContentType);
+            }
+
+        };    
+        
+
+        Map<String, String> vparams = new HashMap<String, String>();
+        vparams.put("authkey", "mysecret");
+        vparams.put("viewparams", "low:2000000;high:5000000");
+        vparams.put("strict", "true");
+        Hints hints = new Hints(WFSDataStore.WFS_VENDOR_PARAMETERS, vparams);
+        Query q = new Query("topp:states");
+        q.setHints(hints);
+        
+        // read some features, check
+        FeatureReader fr = wfs.getFeatureReader(q, Transaction.AUTO_COMMIT);
+        assertTrue(fr.hasNext());
+        fr.close();
+    }
+   
 
 }

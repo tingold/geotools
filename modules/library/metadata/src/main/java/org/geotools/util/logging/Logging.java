@@ -24,11 +24,13 @@ import java.util.logging.LogRecord;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 
+import javax.media.jai.JAI;
+import javax.media.jai.util.ImagingListener;
+
 import org.geotools.resources.XArray;
 import org.geotools.resources.Classes;
 import org.geotools.resources.i18n.Errors;
 import org.geotools.resources.i18n.ErrorKeys;
-
 
 /**
  * A set of utilities method for configuring loggings in GeoTools. <strong>All GeoTools
@@ -53,6 +55,25 @@ import org.geotools.resources.i18n.ErrorKeys;
  * @author Martin Desruisseaux
  */
 public final class Logging {
+    private static final class LoggingImagingListener implements ImagingListener {
+        @Override
+        public boolean errorOccurred(String message, Throwable thrown, Object where,
+                boolean isRetryable) throws RuntimeException {
+            Logger log = Logging.getLogger("javax.media.jai");
+            if (message.contains("Continuing in pure Java mode")) {
+                log.log(Level.FINER, message, thrown);
+            } else {
+                log.log(Level.INFO, message, thrown);
+            }
+            return false; // we are not trying to recover
+        }
+
+        @Override
+        public String toString() {
+            return "LoggingImagingListener";
+        }
+    }
+
     /**
      * Compares {@link Logging} or {@link String} objects for alphabetical order.
      */
@@ -99,14 +120,42 @@ public final class Logging {
      *
      * @see #setLoggerFactory
      */
-    private LoggerFactory factory;
+    private LoggerFactory<?> factory;
 
     /**
      * {@code true} if every {@link Logging} instances use the same {@link LoggerFactory}.
      * This is an optimization for a very common case.
      */
     private static boolean sameLoggerFactory = true;
-
+    
+    // Check default JAI instance
+    private static boolean jaiMessageRedirect = false;
+    private static void checkJaiMessageRedirect() {
+        if( jaiMessageRedirect ) {
+            return; // checked already
+        }
+        JAI jai = null;
+        try {
+            jai = JAI.getDefaultInstance();
+        }
+        catch (Throwable t){
+            // JAI is not ready yet
+        }
+        if( jai == null){
+            return; // JAI not ready yet we cannot check
+        }
+        ImagingListener imagingListener = jai.getImagingListener();
+        if( imagingListener == null || imagingListener.getClass().getName().contains("ImagingListenerImpl")){
+            // Client code has not provided an ImagingListener so we can use our own
+            // Custom GeoTools ImagingListener used to ignore common warnings 
+            jai.setImagingListener(new LoggingImagingListener());
+            System.out.println("Logging JAI messages: redirected to javax.media.jai logger");
+        }
+        else {
+            System.out.println("Logging JAI messages: ImagingListener already in use: "+imagingListener);
+        }
+        jaiMessageRedirect = true;
+    }
     /**
      * Creates an instance for the root logger. This constructor should not be used
      * for anything else than {@link #ALL} construction; use {@link #getLogging} instead.
@@ -161,7 +210,7 @@ public final class Logging {
         synchronized (EMPTY) {
             final Logging logging = sameLoggerFactory ? ALL : getLogging(name, false);
             if (logging != null) { // Paranoiac check ('getLogging' should not returns null).
-                final LoggerFactory factory = logging.factory;
+                final LoggerFactory<?> factory = logging.factory;
                 assert getLogging(name, false).factory == factory : name;
                 if (factory != null) {
                     final Logger logger = factory.getLogger(name);
@@ -241,7 +290,7 @@ public final class Logging {
      * by the last call to {@link #setLoggerFactory} on this {@code Logging} instance or on one
      * of its parent.
      */
-    public LoggerFactory getLoggerFactory() {
+    public LoggerFactory<?> getLoggerFactory() {
         synchronized (EMPTY) {
             return factory;
         }
@@ -252,7 +301,7 @@ public final class Logging {
      * specified factory will be used by <code>{@linkplain #getLogger(String) getLogger}(name)</code>
      * when {@code name} is this {@code Logging} name or one of its children.
      */
-    public void setLoggerFactory(final LoggerFactory factory) {
+    public void setLoggerFactory(final LoggerFactory<?> factory) {
         synchronized (EMPTY) {
             this.factory = factory;
             for (int i=0; i<children.length; i++) {
@@ -266,7 +315,7 @@ public final class Logging {
      * Returns {@code true} if all children use the specified factory.
      * Used in order to detect a possible optimization for this very common case.
      */
-    private static boolean sameLoggerFactory(final Logging[] children, final LoggerFactory factory) {
+    private static boolean sameLoggerFactory(final Logging[] children, final LoggerFactory<?> factory) {
         assert Thread.holdsLock(EMPTY);
         for (int i=0; i<children.length; i++) {
             final Logging logging = children[i];
@@ -291,7 +340,7 @@ public final class Logging {
     public void setLoggerFactory(final String className)
             throws ClassNotFoundException, IllegalArgumentException
     {
-        final LoggerFactory factory;
+        final LoggerFactory<?> factory;
         if (className == null) {
             factory = null;
         } else {

@@ -41,17 +41,18 @@ import org.opengis.filter.expression.Literal;
  */
 class RenderingProcessFunction extends ProcessFunction implements RenderingTransformation {
 
-    public RenderingProcessFunction(String name, Name processName, List<Expression> inputExpressions,
+    public RenderingProcessFunction(Name processName, List<Expression> inputExpressions,
             Map<String, Parameter<?>> parameters, RenderingProcess process, Literal fallbackValue) {
-        super(name, processName, inputExpressions, parameters, process, fallbackValue);
+        super(processName, inputExpressions, parameters, process, fallbackValue);
     }
 
     public Query invertQuery(Query targetQuery, GridGeometry gridGeometry) {
         RenderingProcess process = (RenderingProcess) this.process;
-        Map<String, Object> params = new HashMap<String,Object>();
-        params.putAll(parameters);
+        // evaluate input expressions
+        // at this point do not have an object to evaluate them against
+        Map<String, Object> inputs = evaluateInputs(null);
         try {
-            return process.invertQuery(params, targetQuery, gridGeometry);
+            return process.invertQuery(inputs, targetQuery, gridGeometry);
         } catch (ProcessException e) {
             throw new RuntimeException("Failed to invert the query, error is: "
                     + e.getMessage(), e);
@@ -60,10 +61,11 @@ class RenderingProcessFunction extends ProcessFunction implements RenderingTrans
 
     public GridGeometry invertGridGeometry(Query targetQuery, GridGeometry targetGridGeometry) {
         RenderingProcess process = (RenderingProcess) this.process;
-        Map<String, Object> params = new HashMap<String,Object>();
-        params.putAll(parameters);
+        // evaluate input expressions
+        // at this point do not have an object to evaluate them against
+        Map<String, Object> inputs = evaluateInputs(null);
         try {
-            return process.invertGridGeometry(params, targetQuery, targetGridGeometry);
+            return process.invertGridGeometry(inputs, targetQuery, targetGridGeometry);
         } catch (ProcessException e) {
             throw new RuntimeException("Failed to invert the grid geometry, error is: "
                     + e.getMessage(), e);

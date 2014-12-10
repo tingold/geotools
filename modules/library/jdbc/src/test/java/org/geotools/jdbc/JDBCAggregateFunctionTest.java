@@ -16,21 +16,29 @@
  */
 package org.geotools.jdbc;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Set;
 
 import org.geotools.data.DefaultQuery;
 import org.geotools.data.Query;
+import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.feature.visitor.MaxVisitor;
 import org.geotools.feature.visitor.MinVisitor;
+import org.geotools.feature.visitor.NearestVisitor;
 import org.geotools.feature.visitor.SumVisitor;
 import org.geotools.feature.visitor.UniqueVisitor;
 import org.geotools.filter.IllegalFilterException;
+import org.geotools.filter.SortByImpl;
+import org.geotools.filter.SortOrder;
+import org.geotools.util.Converters;
 import org.opengis.feature.Feature;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
 import org.opengis.filter.FilterFactory;
 import org.opengis.filter.expression.Expression;
 import org.opengis.filter.expression.PropertyName;
+import org.opengis.filter.sort.SortBy;
 
 /**
  * 
@@ -115,6 +123,7 @@ public abstract class JDBCAggregateFunctionTest extends JDBCTestSupport {
             super.visit(feature);
             visited = true;
         }
+        
         public void visit(SimpleFeature feature) {
             super.visit(feature);
             visited = true;
@@ -270,7 +279,7 @@ public abstract class JDBCAggregateFunctionTest extends JDBCTestSupport {
     
     public void testUniqueWithLimitOffset() throws Exception {
         
-        if (!dataStore.getSQLDialect().isLimitOffsetSupported()) {
+        if (!dataStore.getSQLDialect().isLimitOffsetSupported() || !dataStore.getSQLDialect().isAggregatedSortSupported("distinct")) {
             return;
         }
         
@@ -285,5 +294,110 @@ public abstract class JDBCAggregateFunctionTest extends JDBCTestSupport {
         assertFalse(visited);
         Set result = v.getResult().toSet();
         assertEquals(2, result.size());
+    }
+    
+    public void testUniqueWithLimitOnVisitor() throws Exception {
+        
+        if (!dataStore.getSQLDialect().isLimitOffsetSupported() || !dataStore.getSQLDialect().isAggregatedSortSupported("distinct")) {
+            return;
+        }
+        
+        FilterFactory ff = dataStore.getFilterFactory();
+        PropertyName p = ff.property( aname("stringProperty") );
+        
+        UniqueVisitor v = new MyUniqueVisitor(p);
+        v.setPreserveOrder(true);
+        v.setStartIndex(0);
+        v.setMaxFeatures(2);
+        Query q = new Query( tname("ft1"));
+        q.setSortBy(new SortBy[] { new SortByImpl(p, SortOrder.ASCENDING)});
+        dataStore.getFeatureSource(tname("ft1")).accepts(q, v, null);
+        assertFalse(visited);
+        Set result = v.getResult().toSet();
+        assertEquals(2, result.size());
+        assertEquals("one", result.iterator().next());
+    }
+    
+    public void testUniqueWithLimitOffsetOnVisitor() throws Exception {
+        
+        if (!dataStore.getSQLDialect().isLimitOffsetSupported() || !dataStore.getSQLDialect().isAggregatedSortSupported("distinct")) {
+            return;
+        }
+        
+        FilterFactory ff = dataStore.getFilterFactory();
+        PropertyName p = ff.property( aname("stringProperty") );
+        
+        UniqueVisitor v = new MyUniqueVisitor(p);
+        v.setPreserveOrder(true);
+        v.setStartIndex(1);
+        v.setMaxFeatures(2);
+        Query q = new Query( tname("ft1"));
+        q.setSortBy(new SortBy[] { new SortByImpl(p, SortOrder.ASCENDING)});
+        dataStore.getFeatureSource(tname("ft1")).accepts(q, v, null);
+        assertFalse(visited);
+        Set result = v.getResult().toSet();
+        assertEquals(2, result.size());
+        assertEquals("two", result.iterator().next());
+    }
+    
+    class MyNearestVisitor extends NearestVisitor {
+
+        public MyNearestVisitor(Expression expr, Object valueToMatch) {
+            super(expr, valueToMatch);
+        }
+        
+        public void visit(Feature feature) {
+            super.visit(feature);
+            visited = true;
+        }
+        
+        public void visit(SimpleFeature feature) {
+            super.visit(feature);
+            visited = true;
+        }
+        
+    }
+    
+    public void testNearest() throws IOException {
+        // test strings
+        testNearest("ft1", "stringProperty", "two", "two"); // exact match
+        testNearest("ft1", "stringProperty", "aaa", "one"); // below
+        testNearest("ft1", "stringProperty", "rrr", "one", "two"); // mid
+        testNearest("ft1", "stringProperty", "zzz", "zero"); // above
+        
+        // test integer
+        testNearest("ft1", "intProperty", 1, 1); // exact match
+        testNearest("ft1", "intProperty", -10, 0); // below
+        testNearest("ft1", "intProperty", 10, 2); // above
+        
+        // test double
+        testNearest("ft1", "doubleProperty", 1.1, 1.1); // exact match
+        testNearest("ft1", "doubleProperty", -10d, 0d); // below
+        testNearest("ft1", "doubleProperty", 1.3, 1.1); // mid
+        testNearest("ft1", "doubleProperty", 1.9, 2.2); // mid
+        testNearest("ft1", "doubleProperty", 10d, 2.2); // above
+        
+    }
+    
+    private void testNearest(String typeName, String attributeName, Object target, Object... validResults) throws IOException {
+        FilterFactory ff = CommonFactoryFinder.getFilterFactory();
+        PropertyName expr = ff.property(aname(attributeName));
+        
+        MyNearestVisitor v = new MyNearestVisitor(expr, target);
+        dataStore.getFeatureSource(tname(typeName)).accepts(Query.ALL, v, null);
+        assertFalse(visited);
+        Object nearestMatch = v.getNearestMatch();
+        if(validResults.length == 0) {
+            assertNull(nearestMatch);
+        } else {
+            boolean found = false;
+            for (Object object : validResults) {
+                if (object.equals(Converters.convert(nearestMatch, object.getClass()))) {
+                    found = true;
+                    break;
+                }
+            }
+            assertTrue("Could not match nearest " + nearestMatch + " among valid values " + Arrays.asList(validResults), found);
+        }
     }
 }

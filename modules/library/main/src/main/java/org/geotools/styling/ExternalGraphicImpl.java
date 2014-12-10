@@ -75,9 +75,13 @@ public class ExternalGraphicImpl implements ExternalGraphic, Symbol, Cloneable {
     }
     
     
-    @Deprecated
     public void setURI(String uri) {
         this.uri = uri;
+    }
+    
+    @Override
+	public String getURI() {
+    	return this.uri;
     }
 
     /**
@@ -98,6 +102,9 @@ public class ExternalGraphicImpl implements ExternalGraphic, Symbol, Cloneable {
      * @throws MalformedURLException If unable to represent external graphic as a URL
      */
     public java.net.URL getLocation() throws MalformedURLException {
+        if (uri == null) {
+            return null;
+        }
         if (location == null) {
             location = new URL(uri);
         }
@@ -120,6 +127,9 @@ public class ExternalGraphicImpl implements ExternalGraphic, Symbol, Cloneable {
      * @param location New value of property location.
      */
     public void setLocation(java.net.URL location) {
+    	if (location == null) {
+    		throw new IllegalArgumentException("ExternalGraphic location URL cannot be null");
+    	}
         this.uri = location.toString();
         this.location = location;
     }
@@ -250,7 +260,7 @@ public class ExternalGraphicImpl implements ExternalGraphic, Symbol, Cloneable {
             return null;
         }
         else if (item instanceof ExternalGraphicImpl){
-            return (ExternalGraphicImpl) item;
+            return (ExternalGraphic) item;
         }
         else if (item instanceof org.opengis.style.ExternalGraphic){
             org.opengis.style.ExternalGraphic graphic = (org.opengis.style.ExternalGraphic) item;

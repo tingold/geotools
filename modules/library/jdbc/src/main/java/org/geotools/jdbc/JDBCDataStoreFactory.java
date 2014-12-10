@@ -51,6 +51,7 @@ import com.vividsolutions.jts.geom.GeometryFactory;
  * @source $URL$
  */
 public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
+    
     /** parameter for database type */
     public static final Param DBTYPE = new Param("dbtype", String.class, "Type", true);
 
@@ -91,7 +92,7 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
     
     /** If connections should be validated before using them */
     public static final Param VALIDATECONN = new Param("validate connections", Boolean .class,
-            "check connection is alive before using it", false, Boolean.FALSE);
+            "check connection is alive before using it", false, Boolean.TRUE);
     
     /** If connections should be validated before using them */
     public static final Param FETCHSIZE = new Param("fetch size", Integer.class,
@@ -100,6 +101,22 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
     /** Maximum amount of time the pool will wait when trying to grab a new connection **/
     public static final Param MAXWAIT = new Param("Connection timeout", Integer.class,
             "number of seconds the connection pool will wait before timing out attempting to get a new connection (default, 20 seconds)", false, 20);
+
+    /** If IDLE connections should be validated before using them **/
+    public static final Param TEST_WHILE_IDLE = new Param("Test while idle", Boolean.class,
+            "Periodically test the connections are still valid also while idle in the pool", false, true);
+
+    /** Idle object evictor periodicity **/
+    public static final Param TIME_BETWEEN_EVICTOR_RUNS = new Param("Evictor run periodicity", Integer.class, 
+            "number of seconds between idle object evitor runs (default, 300 seconds)", false, 300);
+
+    /** Min time for a connection to be idle in order to be evicted **/
+    public static final Param MIN_EVICTABLE_TIME = new Param("Max connection idle time", Integer.class, 
+            "number of seconds a connection needs to stay idle for the evictor to consider closing it", false, 300);
+
+    /** Number of connections checked during a single evictor run  **/
+    public static final Param EVICTOR_TESTS_PER_RUN = new Param("Evictor tests per run", Integer.class, 
+            "number of connections checked by the idle connection evictor for each of its runs (defaults to 3)", false, 3);
     
     /** Metadata table providing information about primary keys **/
     public static final Param PK_METADATA_TABLE = new Param("Primary key metadata table", String.class,
@@ -113,6 +130,17 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
     /** expose primary key columns as attributes */
     public static final Param EXPOSE_PK = new Param("Expose primary keys", Boolean.class, "Expose primary key columns as " +
     		"attributes of the feature type", false, false);
+    
+    /** SQL executed when the session begins */
+    public static final Param SQL_ON_BORROW = new Param("Session startup SQL", String.class, 
+            "SQL statement executed when the connection is grabbed from the pool", false, null, 
+            Collections.singletonMap(Parameter.IS_LARGE_TEXT, Boolean.TRUE));
+    
+    /** SQL executed when the session ends */
+    public static final Param SQL_ON_RELEASE = new Param("Session close-up SQL", String.class, 
+            "SQL statement executed when the connection is released to the pool", false, null,
+            Collections.singletonMap(Parameter.IS_LARGE_TEXT, Boolean.TRUE));
+
     
     @Override
     public String getDisplayName() {
@@ -196,7 +224,7 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
                 tableFinder.setTableSchema(parts[0]);
                 tableFinder.setTableName(parts[1]);
             } else {
-                tableFinder.setTableSchema(metadataTable);
+                tableFinder.setTableName(metadataTable);
             }
             dataStore.setPrimaryKeyFinder(new CompositePrimaryKeyFinder(tableFinder, 
                     new HeuristicPrimaryKeyFinder()));
@@ -208,6 +236,14 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
             dataStore.setExposePrimaryKeyColumns(exposePk);
         }
         
+        // session startup and teardown
+        String sqlOnBorrow = (String) SQL_ON_BORROW.lookUp(params);
+        String sqlOnRelease = (String) SQL_ON_RELEASE.lookUp(params);
+        if(sqlOnBorrow != null || sqlOnRelease != null) {
+            SessionCommandsListener listener = new SessionCommandsListener(sqlOnBorrow, sqlOnRelease);
+            dataStore.getConnectionLifecycleListeners().add(listener);
+        }
+        
         // factories
         dataStore.setFilterFactory(CommonFactoryFinder.getFilterFactory(null));
         dataStore.setGeometryFactory(new GeometryFactory());
@@ -216,7 +252,11 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
         dataStore.setDataStoreFactory(this);
         
         //call subclass hook and return
-        return createDataStoreInternal(dataStore, params);
+        JDBCDataStore result = createDataStoreInternal(dataStore, params);
+        if( result.getDataSource() == null ){
+            throw new IOException("JDBC Connection not available with provided parameters");
+        }
+        return result;
     }
 
     /**
@@ -292,7 +332,13 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
         parameters.put(MAXWAIT.key, MAXWAIT);
         if(getValidationQuery() != null)
             parameters.put(VALIDATECONN.key, VALIDATECONN);
+        parameters.put(TEST_WHILE_IDLE.key, TEST_WHILE_IDLE);
+        parameters.put(TIME_BETWEEN_EVICTOR_RUNS.key, TIME_BETWEEN_EVICTOR_RUNS);
+        parameters.put(MIN_EVICTABLE_TIME.key, MIN_EVICTABLE_TIME);
+        parameters.put(EVICTOR_TESTS_PER_RUN.key, EVICTOR_TESTS_PER_RUN);
         parameters.put(PK_METADATA_TABLE.key, PK_METADATA_TABLE);
+        parameters.put(SQL_ON_BORROW.key, SQL_ON_BORROW);
+        parameters.put(SQL_ON_RELEASE.key, SQL_ON_RELEASE);
     }
 
     /**
@@ -437,6 +483,26 @@ public abstract class JDBCDataStoreFactory extends AbstractDataStoreFactory {
         if(validate != null && validate && getValidationQuery() != null) {
             dataSource.setTestOnBorrow(true);
             dataSource.setValidationQuery(getValidationQuery());
+        }
+        
+        Boolean testWhileIdle = (Boolean) TEST_WHILE_IDLE.lookUp(params);
+        if(testWhileIdle != null) {
+            dataSource.setTestWhileIdle(testWhileIdle);
+        }
+        
+        Integer timeBetweenEvictorRuns = (Integer) TIME_BETWEEN_EVICTOR_RUNS.lookUp(params);
+        if(timeBetweenEvictorRuns != null && timeBetweenEvictorRuns > 0) {
+            dataSource.setTimeBetweenEvictionRunsMillis(timeBetweenEvictorRuns * 1000l);
+        }
+
+        Integer minEvictableTime = (Integer) MIN_EVICTABLE_TIME.lookUp(params);
+        if(minEvictableTime != null) {
+            dataSource.setMinEvictableIdleTimeMillis(minEvictableTime * 1000l);
+        }
+
+        Integer evictorTestsPerRun = (Integer) EVICTOR_TESTS_PER_RUN.lookUp(params);
+        if(evictorTestsPerRun != null) {
+            dataSource.setNumTestsPerEvictionRun(evictorTestsPerRun);
         }
         
         // some datastores might need this

@@ -23,9 +23,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.geotools.data.Parameter;
 import org.geotools.filter.capability.FunctionNameImpl;
@@ -41,13 +43,17 @@ import org.opengis.filter.expression.Function;
 import org.opengis.filter.expression.Literal;
 
 /**
- * A function wrapping a {@link Process} with a single output. All inputs to the function are
- * supposed to evaluate to Map<String, Object> where the key is the name of an argument and the
+ * A wrapper allowing a {@link Process} with a single output to be called as a {@link Function}.
+ * Since Function parameters are positional and Process parameters are named,
+ * the following strategy is used to allow specifying named Process parameters
+ * as function inputs. 
+ * All inputs to the function must evaluate to Map<String, Object>,
+ * with a single entry where the key is the name of a process parameter and the
  * value is the argument value
  * 
  * @author Andrea Aime - GeoSolutions
  */
-class ProcessFunction implements Function {
+public class ProcessFunction implements Function {
 
     String name;
 
@@ -60,16 +66,43 @@ class ProcessFunction implements Function {
     Process process;
 
     Name processName;
+
+    FunctionNameImpl functionName;
     
-    ProcessFunction(String name, Name processName, List<Expression> inputExpressions,
+    public ProcessFunction(Name processName, List<Expression> inputExpressions,
             Map<String, Parameter<?>> parameters, Process process, Literal fallbackValue) {
         super();
-        this.name = name;
+        String nsuri = processName.getNamespaceURI();
+        this.name = nsuri == null ? processName.getLocalPart() : nsuri + ":" + processName.getLocalPart();
         this.processName = processName;
         this.inputExpressions = inputExpressions;
         this.parameters = parameters;
         this.process = process;
         this.fallbackValue = fallbackValue;
+        
+        // build the function name
+        List<org.opengis.parameter.Parameter<?>> inputParams = new ArrayList<org.opengis.parameter.Parameter<?>>();
+        Map<String, Parameter<?>> parameterInfo = Processors.getParameterInfo(processName);
+        if( parameterInfo instanceof LinkedHashMap){
+            // predictable order so we can assume parameter order
+            for (Parameter<?> param : parameterInfo.values() ){
+                // we do not specify the parameter type to avoid validation issues with the
+                // different positional/named conventions 
+                inputParams.add(param);
+            }
+        }
+        else {
+            Set<String> paramNames = parameterInfo.keySet();
+            for (String pn: paramNames) {
+                // we do not specify the parameter type to avoid validation issues with the
+                // different positional/named conventions 
+                org.opengis.parameter.Parameter param = FunctionNameImpl.parameter(pn, Object.class, 0, 1);
+                inputParams.add(param);
+            }
+        }
+        Map<String, Parameter<?>> resultParams = Processors.getResultInfo(processName, null);
+        org.opengis.parameter.Parameter result = resultParams.values().iterator().next();
+        functionName = new FunctionNameImpl(name, result, inputParams);
     }
 
     public Literal getFallbackValue() {
@@ -79,8 +112,13 @@ class ProcessFunction implements Function {
     public String getName() {
         return name;
     }
+    
+    public Name getProcessName() {
+        return processName;
+    }
+    
     public FunctionName getFunctionName() {
-        return new FunctionNameImpl( name, inputExpressions.size() );
+        return functionName;
     }
     public List<Expression> getParameters() {
         return inputExpressions;
@@ -96,7 +134,41 @@ class ProcessFunction implements Function {
     }
 
     public Object evaluate(Object object) {
-        // collect the entries
+        Map<String, Object> processInputs = evaluateInputs(object);
+
+        // execute the process
+        try {
+            ExceptionProgressListener listener = new ExceptionProgressListener();
+            Map<String, Object> results = process.execute(processInputs, listener);
+            
+            // some processes have the bad habit of not throwing exceptions, but to
+            // report them to the listener
+            if(listener.getExceptions().size() > 0) {
+                // uh oh, an exception occurred during processing
+                Throwable t = listener.getExceptions().get(0);
+                throw new RuntimeException("Failed to evaluate process function, error is: " 
+                        + t.getMessage(), t);
+            }
+            
+            return getResult(results, processInputs);
+        } catch (ProcessException e) {
+            throw new RuntimeException("Failed to evaluate the process function, error is: "
+                    + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Evaluates the process input expressions.
+     * The object provides the context for evaluating the input expressions,
+     * and may be null if no context is available
+     * (for instance, when being called to evaluation the inputs
+     * for the {@link RenderingProcessFunction} inversion methods).
+     * 
+     * @param object the object to evaluate the input expressions against.
+     * @return the map of inputs
+     */
+	protected Map<String, Object> evaluateInputs(Object object) {
+		// collect the entries
         Map<String, Object> processInputs = new HashMap<String, Object>();
         for (Expression input : inputExpressions) {
             Object result = input.evaluate(object, Map.class);
@@ -168,27 +240,8 @@ class ProcessFunction implements Function {
                 }
             }
         }
-
-        // execute the process
-        try {
-            ExceptionProgressListener listener = new ExceptionProgressListener();
-            Map<String, Object> results = process.execute(processInputs, listener);
-            
-            // some processes have the bad habit of not throwing exceptions, but to
-            // report them to the listener
-            if(listener.getExceptions().size() > 0) {
-                // uh oh, an exception occurred during processing
-                Throwable t = listener.getExceptions().get(0);
-                throw new RuntimeException("Failed to evaluate process function, error is: " 
-                        + t.getMessage(), t);
-            }
-            
-            return getResult(results, processInputs);
-        } catch (ProcessException e) {
-            throw new RuntimeException("Failed to evaluate the process function, error is: "
-                    + e.getMessage(), e);
-        }
-    }
+		return processInputs;
+	}
 
     private Object getResult(Map<String, Object> results, Map<String, Object> processInputs) {
         if (results.size() == 1) {

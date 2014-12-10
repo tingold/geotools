@@ -24,6 +24,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -36,9 +37,13 @@ import java.util.logging.Logger;
 import org.geotools.data.FeatureReader;
 import org.geotools.data.Transaction;
 import org.geotools.factory.Hints;
+import org.geotools.feature.GeometryAttributeImpl;
 import org.geotools.feature.IllegalAttributeException;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
+import org.geotools.feature.type.AttributeDescriptorImpl;
+import org.geotools.feature.type.Types;
 import org.geotools.filter.identity.FeatureIdImpl;
+import org.geotools.geometry.jts.CurvedGeometryFactory;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.util.Converters;
 import org.geotools.util.logging.Logging;
@@ -137,7 +142,17 @@ public class JDBCFeatureReader implements  FeatureReader<SimpleFeatureType, Simp
         st.setFetchSize(featureSource.getDataStore().getFetchSize());
         
         ((BasicSQLDialect)featureSource.getDataStore().getSQLDialect()).onSelect(st, cx, featureType);
-        rs = st.executeQuery(sql);
+        try {
+            rs = st.executeQuery(sql);
+        } catch (Exception e1) {
+            // make sure to mark as closed, otherwise we are going to log that it was not
+            try {
+                close();
+            } catch (IOException e2) {
+
+            }
+            throw new SQLException(e1);
+        }
     }
     
     public JDBCFeatureReader( PreparedStatement st, Connection cx, JDBCFeatureSource featureSource, SimpleFeatureType featureType, Hints hints ) 
@@ -193,6 +208,11 @@ public class JDBCFeatureReader implements  FeatureReader<SimpleFeatureType, Simp
             geometryFactory = dataStore.getGeometryFactory();
         }
         
+        Double linearizationTolerance = (Double) hints.get(Hints.LINEARIZATION_TOLERANCE);
+        if (linearizationTolerance != null) {
+            geometryFactory = new CurvedGeometryFactory(geometryFactory, linearizationTolerance);
+        }
+
         // create a feature builder using the factory hinted or the one coming 
         // from the datastore
         FeatureFactory ff = (FeatureFactory) hints.get(Hints.FEATURE_FACTORY);
@@ -680,7 +700,7 @@ public class JDBCFeatureReader implements  FeatureReader<SimpleFeatureType, Simp
         }
 
         public List<Object> getAttributes() {
-            throw new UnsupportedOperationException();
+            return Arrays.asList(values);
         }
 
         public Object getDefaultGeometry() {
@@ -689,7 +709,15 @@ public class JDBCFeatureReader implements  FeatureReader<SimpleFeatureType, Simp
         }
 
         public void setAttributes(Object[] object) {
-            throw new UnsupportedOperationException();
+            if (object == null) {
+                throw new NullPointerException("Attributes array is null");
+            } else if (object.length != values.length) {
+                throw new IllegalArgumentException("The passed array has wrong size: passed_size="
+                        + object.length + " values_size" + values.length);
+            }
+            for (int i = 0; i < object.length; i++) {
+                setAttribute(i, object[i]);
+            }
         }
 
         public void setDefaultGeometry(Object defaultGeometry) {
@@ -707,47 +735,60 @@ public class JDBCFeatureReader implements  FeatureReader<SimpleFeatureType, Simp
         }
 
         public GeometryAttribute getDefaultGeometryProperty() {
-            throw new UnsupportedOperationException();
+            GeometryDescriptor geometryDescriptor = featureType.getGeometryDescriptor();
+            GeometryAttribute geometryAttribute = null;
+            if(geometryDescriptor != null){
+                Object defaultGeometry = getDefaultGeometry();
+                geometryAttribute = new GeometryAttributeImpl(defaultGeometry, geometryDescriptor, null);            
+            }
+            return geometryAttribute;
         }
 
         public void setDefaultGeometryProperty(GeometryAttribute defaultGeometry) {
-            throw new UnsupportedOperationException();
+            if(defaultGeometry != null)
+                setDefaultGeometry(defaultGeometry.getValue());
+            else
+                setDefaultGeometry(null);
         }
 
         public Collection<Property> getProperties() {
-            throw new UnsupportedOperationException();
+            throw new UnsupportedOperationException("Use getAttributes()");
         }
 
         public Collection<Property> getProperties(Name name) {
-            throw new UnsupportedOperationException();
+            throw new UnsupportedOperationException("Use getAttributes()");
         }
 
         public Collection<Property> getProperties(String name) {
-            throw new UnsupportedOperationException();
+            throw new UnsupportedOperationException("Use getAttributes()");
         }
 
         public Property getProperty(Name name) {
-            throw new UnsupportedOperationException();
+            throw new UnsupportedOperationException("Use getAttribute()");
         }
 
         public Property getProperty(String name) {
-            throw new UnsupportedOperationException();
+            throw new UnsupportedOperationException("Use getAttribute()");
         }
 
         public Collection<?extends Property> getValue() {
-            throw new UnsupportedOperationException();
+            return getProperties();
         }
 
         public void setValue(Collection<Property> value) {
-            throw new UnsupportedOperationException();
+            int i = 0;
+            for ( Property p : value ) {
+                this.values[i] = p.getValue();
+            }
         }
 
         public AttributeDescriptor getDescriptor() {
-            throw new UnsupportedOperationException();
+            return new AttributeDescriptorImpl(featureType, featureType.getName(), 0,
+                    Integer.MAX_VALUE, true, null);
         }
 
         public Name getName() {
-            throw new UnsupportedOperationException();
+            return featureType.getName();
         }
 
         public Map<Object, Object> getUserData() {
@@ -755,13 +796,18 @@ public class JDBCFeatureReader implements  FeatureReader<SimpleFeatureType, Simp
         }
 
         public boolean isNillable() {
-            throw new UnsupportedOperationException();
+            return true;
         }
 
         public void setValue(Object value) {
-            throw new UnsupportedOperationException();
+            setValue( (Collection<Property>) value );
         }
+        
         public void validate() {
+            for (int i = 0; i < values.length; i++) {
+                AttributeDescriptor descriptor = getType().getDescriptor(i);
+                Types.validate(descriptor, values[i]);
+            }
         }
     }
 
