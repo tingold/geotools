@@ -37,7 +37,7 @@ public class FeatureClassStatsTest {
             { 'f', 8 }, { 'g', 8 }, { 'h', 9 }, { 'i', 11 }, { 'j', 14 }, { 'k', 16 }, { 'l', 24 },
             { 'm', 26 }, { 'n', 26 }, { 'o', 45 } };*/
 
-    SimpleFeatureCollection features;
+    DefaultFeatureCollection features;
 
     @Before
     public void setup() throws IOException {
@@ -53,6 +53,7 @@ public class FeatureClassStatsTest {
         for (Object[] tuple : data) {
             b.add(tuple[0]);
             b.add(tuple[1]);
+
             features.add(b.buildFeature(null));
         }
     }

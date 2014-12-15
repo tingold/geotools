@@ -2,6 +2,7 @@ package org.geotools.process.feature.gs;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -9,7 +10,6 @@ import java.util.Set;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
-import org.geotools.filter.Expression;
 import org.geotools.filter.function.ClassificationFunction;
 import org.geotools.filter.function.EqualIntervalFunction;
 import org.geotools.filter.function.JenksNaturalBreaksFunction;
@@ -31,6 +31,7 @@ import org.jaitools.numeric.StreamingSampleStats;
 import org.opengis.feature.Feature;
 import org.opengis.feature.type.PropertyDescriptor;
 import org.opengis.filter.FilterFactory;
+import org.opengis.filter.expression.Expression;
 import org.opengis.util.ProgressListener;
 
 @DescribeProcess(title = "featureClassStats", description = "Calculates statistics from feature" +
@@ -105,7 +106,7 @@ public class FeatureClassStats implements GSProcess {
                 throw new ProcessException("Unknown method: " + method);
         }
         cf.setClasses(classes);
-        cf.setExpression((Expression) filterFactory.property(attribute));
+        cf.setParameters(Arrays.asList((Expression)filterFactory.property(attribute)));
 
         //compute the breaks
         RangedClassifier rc = (RangedClassifier) cf.evaluate(features);
