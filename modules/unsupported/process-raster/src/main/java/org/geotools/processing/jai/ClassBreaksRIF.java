@@ -1,4 +1,4 @@
-package org.geotools.process.raster.classbreaks;
+package org.geotools.processing.jai;
 
 import java.awt.RenderingHints;
 import java.awt.image.RenderedImage;
@@ -9,7 +9,7 @@ import javax.media.jai.ROI;
 
 import org.geotools.process.classify.Classification.Method;
 
-import static org.geotools.process.raster.classbreaks.ClassBreaksDescriptor.*;
+import static org.geotools.processing.jai.ClassBreaksDescriptor.*;
 
 public class ClassBreaksRIF implements RenderedImageFactory {
 

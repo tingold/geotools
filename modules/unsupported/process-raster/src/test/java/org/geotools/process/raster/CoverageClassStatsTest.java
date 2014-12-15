@@ -1,4 +1,4 @@
-package org.geotools.process.raster.gs;
+package org.geotools.process.raster;
 
 import static org.junit.Assert.assertEquals;
 
@@ -27,7 +27,7 @@ import org.geotools.coverage.grid.GridCoverageFactory;
 import org.geotools.coverage.grid.GridGeometry2D;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.process.classify.Classification.Method;
-import org.geotools.process.raster.gs.CoverageClassStats.Results;
+import org.geotools.process.raster.CoverageClassStats.Results;
 import org.geotools.referencing.crs.DefaultEngineeringCRS;
 import org.geotools.referencing.cs.DefaultCartesianCS;
 import org.geotools.referencing.datum.DefaultEngineeringDatum;

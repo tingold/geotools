@@ -1,29 +1,17 @@
-package org.geotools.process.feature.gs;
+package org.geotools.process.vector;
 
 import static org.junit.Assert.*;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
 
-import org.geotools.data.DataStore;
-import org.geotools.data.property.PropertyDataStore;
-import org.geotools.data.simple.SimpleFeatureCollection;
-import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.feature.DefaultFeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
-import org.geotools.feature.visitor.FeatureCalc;
-import org.geotools.filter.function.Classifier;
-import org.geotools.filter.function.RangedClassifier;
 import org.geotools.process.classify.Classification.Method;
-import org.geotools.process.feature.gs.FeatureClassStats.Results;
-import org.geotools.test.TestData;
+import org.geotools.process.vector.FeatureClassStats.Results;
 import org.jaitools.numeric.Statistic;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.opengis.feature.simple.SimpleFeatureType;

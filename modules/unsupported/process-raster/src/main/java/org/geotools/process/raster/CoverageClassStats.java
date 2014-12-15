@@ -1,4 +1,4 @@
-package org.geotools.process.raster.gs;
+package org.geotools.process.raster;
 
 import java.awt.image.RenderedImage;
 import java.awt.image.renderable.ParameterBlock;
@@ -9,11 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 import javax.media.jai.JAI;
-import javax.media.jai.OperationDescriptor;
-import javax.media.jai.OperationRegistry;
 import javax.media.jai.ParameterBlockJAI;
-import javax.media.jai.ROI;
-import javax.media.jai.RenderedOp;
 import javax.media.jai.operator.BandSelectDescriptor;
 
 import org.geotools.coverage.grid.GridCoverage2D;
@@ -25,9 +21,8 @@ import org.geotools.process.factory.DescribeParameter;
 import org.geotools.process.factory.DescribeProcess;
 import org.geotools.process.factory.DescribeResult;
 import org.geotools.process.gs.GSProcess;
-import org.geotools.process.raster.classbreaks.ClassBreaksDescriptor;
-import org.geotools.process.raster.classbreaks.ClassBreaksOpImage;
-import org.geotools.process.raster.classbreaks.ClassBreaksRIF;
+import org.geotools.processing.jai.ClassBreaksDescriptor;
+import org.geotools.processing.jai.ClassBreaksRIF;
 import org.geotools.renderer.i18n.Errors;
 import org.geotools.resources.i18n.ErrorKeys;
 import org.jaitools.media.jai.zonalstats.Result;
@@ -39,7 +34,7 @@ import org.opengis.util.ProgressListener;
 
 @DescribeProcess(title = "coverageClassStats", description = "Calculates statistics from coverage" +
                  " values classified into bins/classes.")
-public class CoverageClassStats implements GSProcess {
+public class CoverageClassStats implements RasterProcess {
 
     @DescribeResult(name = "results", description = "The classified results")
     public Results execute(

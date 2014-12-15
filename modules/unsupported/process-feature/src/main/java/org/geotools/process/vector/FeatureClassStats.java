@@ -1,4 +1,4 @@
-package org.geotools.process.feature.gs;
+package org.geotools.process.vector;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -36,7 +36,7 @@ import org.opengis.util.ProgressListener;
 
 @DescribeProcess(title = "featureClassStats", description = "Calculates statistics from feature" +
         " values classified into bins/classes.")
-public class FeatureClassStats implements GSProcess {
+public class FeatureClassStats implements VectorProcess {
 
     static FilterFactory filterFactory = CommonFactoryFinder.getFilterFactory();
 
@@ -105,8 +105,8 @@ public class FeatureClassStats implements GSProcess {
             default:
                 throw new ProcessException("Unknown method: " + method);
         }
-        cf.setClasses(classes);
-        cf.setParameters(Arrays.asList((Expression)filterFactory.property(attribute)));
+        cf.setParameters(Arrays.asList((Expression)filterFactory.property(attribute),
+            (Expression)filterFactory.literal(classes)));
 
         //compute the breaks
         RangedClassifier rc = (RangedClassifier) cf.evaluate(features);

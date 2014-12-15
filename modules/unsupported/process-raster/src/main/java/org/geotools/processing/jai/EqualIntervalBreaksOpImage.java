@@ -1,13 +1,8 @@
-package org.geotools.process.raster.classbreaks;
+package org.geotools.processing.jai;
 
-import java.awt.Rectangle;
-import java.awt.image.DataBuffer;
-import java.awt.image.Raster;
 import java.awt.image.RenderedImage;
 
-import javax.media.jai.PixelAccessor;
 import javax.media.jai.ROI;
-import javax.media.jai.UnpackedImageData;
 
 import org.geotools.process.classify.Classification;
 import org.geotools.process.classify.Classification.Method;

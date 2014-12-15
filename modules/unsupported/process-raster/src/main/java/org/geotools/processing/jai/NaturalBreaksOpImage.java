@@ -1,10 +1,8 @@
-package org.geotools.process.raster.classbreaks;
+package org.geotools.processing.jai;
 
 import java.awt.image.RenderedImage;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.SortedSet;
 
 import javax.media.jai.ROI;
 
