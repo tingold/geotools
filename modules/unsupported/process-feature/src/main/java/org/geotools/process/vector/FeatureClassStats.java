@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.feature.FeatureCollection;
@@ -25,6 +26,7 @@ import org.geotools.process.gs.GSProcess;
 import org.geotools.resources.i18n.ErrorKeys;
 import org.geotools.resources.i18n.Errors;
 import org.geotools.util.Converters;
+import org.geotools.util.logging.Logging;
 import org.jaitools.numeric.Range;
 import org.jaitools.numeric.Statistic;
 import org.jaitools.numeric.StreamingSampleStats;
@@ -37,6 +39,8 @@ import org.opengis.util.ProgressListener;
 @DescribeProcess(title = "featureClassStats", description = "Calculates statistics from feature" +
         " values classified into bins/classes.")
 public class FeatureClassStats implements VectorProcess {
+
+    static Logger LOG = Logging.getLogger(FeatureClassStats.class);
 
     static FilterFactory filterFactory = CommonFactoryFinder.getFilterFactory();
 
@@ -137,8 +141,16 @@ public class FeatureClassStats implements VectorProcess {
                     continue;
                 }
 
-                int slot = rc.classify(val);
-                sampleStats[slot].offer(Converters.convert(val, Double.class));
+                // convert to double
+                Double dubVal = Converters.convert(val, Double.class);
+                if (dubVal == null) {
+                    LOG.warning(String.format(
+                        "Unable to convert value %s (attribute '%s') to Double, skipping", val, attribute));
+                    continue;
+                }
+
+                int slot = rc.classify(dubVal);
+                sampleStats[slot].offer(dubVal);
             }
         }
         finally {
