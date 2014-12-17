@@ -49,8 +49,8 @@ public class FeatureClassStatsTest {
     @Test
     public void testEqualInterval() throws Exception {
 
-        Results result = new FeatureClassStats().execute(features, "valu", 4, Method.EQUAL_INTERVAL, 
-            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), null, null);
+        Results result = new FeatureClassStats().execute(features, "valu",
+            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), 4, Method.EQUAL_INTERVAL, null, null);
 
         assertResult(result, 4, new Number[][] { { 1, 14 }, { 14, 27 }, { 27, 40 }, { 40, 53 } },
         /* count */new Integer[] { 9, 5, 0, 2 },
@@ -60,8 +60,8 @@ public class FeatureClassStatsTest {
 
     @Test
     public void testQuantile() throws Exception {
-        Results result = new FeatureClassStats().execute(features, "valu", 4, Method.QUANTILE, 
-            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), null, null);
+        Results result = new FeatureClassStats().execute(features, "valu",
+            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), 4, Method.QUANTILE, null, null);
 
         assertResult(result, 4, new Number[][] { { 1, 3 }, { 3, 11 }, { 11, 26 }, { 26, 53 } },
         /* count */new Integer[] { 3, 5, 4, 4 },
@@ -72,8 +72,8 @@ public class FeatureClassStatsTest {
 
     @Test
     public void testNatural() throws Exception {
-        Results result = new FeatureClassStats().execute(features, "valu", 4, Method.NATURAL_BREAKS, 
-            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), null, null);
+        Results result = new FeatureClassStats().execute(features, "valu",
+            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), 4, Method.NATURAL_BREAKS, null, null);
 
         assertResult(result, 4, new Number[][] { { 1, 3 }, { 3, 16 }, { 16, 26 }, { 26, 53 } },
             /* count */new Integer[] { 3, 7, 2, 4 },

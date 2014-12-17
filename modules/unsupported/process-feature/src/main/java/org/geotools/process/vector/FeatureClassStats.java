@@ -50,13 +50,13 @@ public class FeatureClassStats implements VectorProcess {
           description = "The feature collection to analyze") FeatureCollection features,
         @DescribeParameter(name = "attribute", 
           description = "The feature attribute to analyze") String attribute,
+        @DescribeParameter(name = "stats",
+                description = "The statistics to calculate for each class", collectionType = Statistic.class) Set<Statistic> stats,
         @DescribeParameter(name = "classes", 
           description = "The number of breaks/classes", min = 0) Integer classes,
         @DescribeParameter(name = "method", 
           description = "The classification method", min = 0) Method method,
-        @DescribeParameter(name = "stats", 
-          description = "The statistics to calculate for each class", collectionType = Statistic.class, min = 0) Set<Statistic> stats,
-        @DescribeParameter(name = "noData", 
+        @DescribeParameter(name = "noData",
           description = "The attribute value to be ommitted from any calculation", min = 0 ) Double noData,
         ProgressListener progressListener) throws ProcessException, IOException {
 

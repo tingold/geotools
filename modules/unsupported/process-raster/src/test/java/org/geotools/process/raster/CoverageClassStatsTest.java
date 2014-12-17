@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 
 import javax.imageio.ImageIO;
@@ -45,10 +46,9 @@ public class CoverageClassStatsTest {
     @Test
     public void testEqualInterval() throws Exception {
         CoverageClassStats p = new CoverageClassStats();
-        Results r = p.execute(createCoverage(), null, 4, Method.EQUAL_INTERVAL,  
-            //new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM, Statistic.SDEV)),
-                new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)),
-            null, null);
+        Results r = p.execute(createCoverage(),
+            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)),
+            null, 4, Method.EQUAL_INTERVAL, null, null);
 
         assertResults(r, 
             new double[]{1d, 14d, 27d, 40d, 53d}, 
@@ -60,8 +60,8 @@ public class CoverageClassStatsTest {
     @Test
     public void testEqualInterval2() throws Exception {
         CoverageClassStats p = new CoverageClassStats();
-        Results r = 
-            p.execute(createViewshedCoverage(), null, 4, Method.EQUAL_INTERVAL, null, null, null);
+        Results r = p.execute(createViewshedCoverage(), Collections.singleton(Statistic.MEAN),
+            null, 4, Method.EQUAL_INTERVAL, null, null);
 
         assertResults(r, 
             new double[]{-1d, -0.5, 0d, 0.5, 1d}, 
@@ -71,10 +71,8 @@ public class CoverageClassStatsTest {
     @Test
     public void testQuantile() throws Exception {
         CoverageClassStats p = new CoverageClassStats();
-        Results r = p.execute(createCoverage(), null, 4, Method.QUANTILE,  
-            //new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM, Statistic.SDEV)),
-                new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)),
-            null, null);
+        Results r = p.execute(createCoverage(), new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)),
+            null, 4, Method.QUANTILE, null, null);
 
         assertResults(r, 
             new double[]{1d, 3d, 11d, 26d, 53d}, 
@@ -85,9 +83,8 @@ public class CoverageClassStatsTest {
     @Test
     public void testNaturalBreaks() throws Exception {
         CoverageClassStats p = new CoverageClassStats();
-        Results r = p.execute(createCoverage(), null, 4, Method.NATURAL_BREAKS,  
-            new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)), 
-            null, null);
+        Results r = p.execute(createCoverage(), new LinkedHashSet<Statistic>(Arrays.asList(Statistic.MEAN, Statistic.SUM)),
+            null, 4, Method.NATURAL_BREAKS, null, null);
 
         assertResults(r, 
             new double[]{1d, 3d, 16d, 26d, 53d}, 
