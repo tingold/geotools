@@ -780,4 +780,48 @@ public class YsldValidateTest {
         List<MarkedYAMLException> errors = validate(builder.toString());
         assertThat(errors, empty());
     }
+    
+    @SuppressWarnings("unchecked")
+    @Test
+    public void testColourAsVariable() throws Exception {
+        StringBuilder builder =  new StringBuilder();
+        builder.append("define: &color '#ff9900'\n");
+        builder.append("symbolizers:\n");
+        builder.append("- polygon:\n");
+        builder.append("    fill-color: *color\n");
+        builder.append("    stroke-color: '#000000'\n");
+        
+        List<MarkedYAMLException> errors = validate(builder.toString());
+        assertThat(errors, empty());
+        
+        builder =  new StringBuilder();
+        builder.append("define: &color '#ff9900'\n");
+        builder.append("symbolizers:\n");
+        builder.append("- polygon:\n");
+        builder.append("    fill-color: *color\n");
+        builder.append("    stroke-color: '#000000'\n");
+        
+        errors = validate(builder.toString());
+        assertThat(errors, empty());
+        
+        builder =  new StringBuilder();
+        builder.append("define: &color '#000000'\n");
+        builder.append("symbolizers:\n");
+        builder.append("- polygon:\n");
+        builder.append("    fill-color: '#ff9900'\n");
+        builder.append("    stroke-color: *color\n");
+        
+        errors = validate(builder.toString());
+        assertThat(errors, empty());
+        
+        builder =  new StringBuilder();
+        builder.append("define: &color '#000000'\n");
+        builder.append("symbolizers:\n");
+        builder.append("- polygon:\n");
+        builder.append("    stroke-color: *color\n");
+        builder.append("    fill-color: '#ff9900'\n");
+        
+        errors = validate(builder.toString());
+        assertThat(errors, empty());
+    }
 }
